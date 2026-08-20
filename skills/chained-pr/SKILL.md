@@ -1,10 +1,10 @@
 ---
-name: gentle-ai-chained-pr
+name: chained-pr
 description: "Trigger: PRs over 400 lines, stacked PRs, review slices. Split oversized changes into chained PRs that protect review focus."
 license: Apache-2.0
 metadata:
   author: gentleman-programming
-  version: "1.0"
+  version: "2.0"
 ---
 
 ## Activation Contract
@@ -15,10 +15,16 @@ Load this skill when a planned PR may exceed **400 changed lines**, SDD forecast
 
 - Split PRs over **400 changed lines** unless a maintainer explicitly accepts `size:exception`.
 - Keep each PR reviewable in about **≤60 minutes**.
+- **Host Detection**: Detect Git host via read-only remote check. If host is unknown or ambiguous, **fail-closed stop** and ask for clarification.
+- **GitHub Provider Route**:
+  - If native stack capability is proven (`gh-stack`), use the GitHub native stack workflow with pinned `gh-stack` commands, review budget (≤400 lines), issue linking (`Closes #N` / `Refs #N`), and remote authority boundaries.
+  - If capability is unproven, **fail-closed stop** with actionable guidance to authorize/prove capability; never silently fall back to portable choreography.
+- **Non-GitHub Provider Route**:
+  - Positively identified non-GitHub hosts (GitLab, Bitbucket, Gitea, etc.): use portable routes (Stacked PRs to main or Feature Branch Chain with tracker).
+  - Check open dependent PRs (`gh pr list --base <branch-to-delete>` or host equivalent) and retarget child PRs before branch deletion; recover orphaned children if parent was deleted.
+- **Governance Isolation**: Do not leak Gentle AI repo-specific governance (internal labels, checklists, or repo URLs) into user repositories.
 - Use one deliverable work unit per PR; keep tests/docs with the unit they verify.
-- State start, end, prior dependencies, follow-up work, and out-of-scope items in every chained PR.
 - Every child PR must include a dependency diagram marking the current PR with `📍`.
-- In Feature Branch Chain, create a draft/no-merge tracker PR; child PR #1 targets the tracker branch, later children target the immediate parent branch.
 - Treat polluted diffs as base bugs: retarget or rebase until only the current work unit appears.
 - Do not mix chain strategies after the user chooses one.
 
@@ -26,25 +32,32 @@ Load this skill when a planned PR may exceed **400 changed lines**, SDD forecast
 
 | Condition | Action |
 |---|---|
+| Host unknown or ambiguous | Fail-closed stop; request host clarification. |
+| GitHub host + proven `gh-stack` capability | Use GitHub native stack workflow with pinned `gh-stack` commands. |
+| GitHub host + unproven stack capability | Fail-closed stop; guide user to install/authorize `gh-stack`. |
+| Positively identified non-GitHub host | Use portable route (Stacked PRs or Feature Branch Chain). |
 | PR ≤400 changed lines and focused | Keep single PR. |
-| PR >400, each slice can land independently | Use Stacked PRs to main. |
-| PR >400, feature must integrate before main | Use Feature Branch Chain with tracker. |
 | Generated/vendor/migration diff cannot split cleanly | Ask maintainer for `size:exception`. |
 | SDD provides `delivery_strategy` | Follow it before apply/PR creation. |
 
 ## Execution Steps
 
-1. Estimate changed lines and identify independent work units.
-2. Ask for a chain strategy when none is cached and the budget is exceeded.
-3. Create branches/PRs using the chosen strategy only.
-4. Add Chain Context to each PR without replacing the repo PR template.
-5. Verify each PR independently: CI/tests/docs/manual checks, rollback scope, and clean diff.
-6. Keep tracker PR draft/no-merge until all child PRs are reviewed and integrated.
+1. **Detect Git Host (Read-Only)**: Inspect remote URL (`git remote get-url origin`). Stop fail-closed if ambiguous or unknown.
+2. **Route by Provider**:
+   - If GitHub: verify `gh-stack` capability; stop fail-closed if unproven.
+   - If non-GitHub (GitLab, Bitbucket, Gitea, etc.): select portable route (Stacked PRs or Feature Branch Chain).
+3. **Partition Work Units**: Split changes into autonomous slices under 400 changed lines.
+4. **Create Branches & PRs**:
+   - Follow chosen provider route.
+   - Add Chain Context to PR body without replacing target repo's PR template.
+   - Link issues accurately (`Closes #N` or `Refs #N`).
+5. **Verify Slices**: Verify each PR independently (CI/tests/docs, clean review diff, rollback scope).
+6. **Retargeting & Deletion Safety**: Check dependent PRs before branch deletion; retarget children first; recover if deleted.
 
 ## Output Contract
 
-Return the chosen strategy, PR order, current PR boundary, dependency diagram, review budget (`additions + deletions`), verification plan, and any `size:exception` rationale.
+Return detected host/provider, chosen strategy/route, PR order, current PR boundary, dependency diagram, review budget (`additions + deletions`), verification plan, and any `size:exception` rationale.
 
 ## References
 
-- [references/chaining-details.md](references/chaining-details.md) — strategy diagrams, PR body section, branch commands, and reviewer guidance.
+- [references/chaining-details.md](references/chaining-details.md) — provider routes, `gh-stack` command surface, portable workflows, retargeting safety, and reviewer guidance.
