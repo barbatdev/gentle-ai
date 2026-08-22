@@ -232,9 +232,9 @@ Before recommending any action that touches permissions, label state, or commit 
 
 Run this in your head (or print and tick) before requesting review:
 
-- [ ] Linked issue has `status:approved` (and the linked PR uses `Closes/Fixes/Resolves`)
+- [ ] Every visible linked issue has `status:approved` in the base repository and uses a well-formed `Closes/Fixes/Resolves #N` or non-closing `Refs #N`
 - [ ] PR title follows `^(type)(\(single-scope\))?!?: <description>` — no comma in scope
-- [ ] Body uses `Closes/Fixes/Resolves #N`, not `Refs`
+- [ ] Body uses one visible, well-formed base-repository reference; `Refs #N` is non-closing and may not be mixed with a closing reference for the same issue
 - [ ] Line counts in `## 📂 Changes` match `gh pr view --json additions,deletions,changedFiles`
 - [ ] No `[x]` claims contradict what the API shows; moves maintainer-applied actions to `## Pending maintainer actions`
 - [ ] Pre-existing failures named with verification method
@@ -255,7 +255,7 @@ Run this in your head (or print and tick) before requesting review:
 | Anti-pattern | Symptom | Fix |
 |---|---|---|
 | "type:* added" checkbox while `labels: []` | CodeRabbit or maintainer catches the lie on first read | Move to `## Pending maintainer actions` with `pending Alan` |
-| Unapproved issue reference | `Check Issue Approved` fails; PR blocked | Ensure every referenced issue (closing or `Refs #N`) is approved by a maintainer |
+| Unapproved, malformed, cross-repository, or mixed closing/non-closing issue reference | `Check Issue Reference` or `Check Issue Approved` fails; PR blocked | Use one visible, well-formed base-repository reference to an approved issue |
 | `[x] PR stays within 400 changed lines` for a 3,200-line PR | `Check PR Cognitive Load` fails; `size:exception` not requested | Compute real totals, document `size:exception` rationale in Pending maintainer section |
 | `feat(tui,cli): wire...` title | Title fails the single-scope regex | Use one of `feat(tui): ...`, `feat(cli): ...`, `feat(tui-cli): ...` (dash, not comma) |
 | Slice branches all base on `main` with stale carry-over commits | Reviewers can't isolate slice-specific changes; `size:exception` needed | Accept Stacked to main (request exception) OR ask maintainer to push slice branches upstream and use Feature Branch Chain |

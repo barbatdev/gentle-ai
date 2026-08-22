@@ -3,143 +3,114 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 
-const { parseLinkedIssues, parseIssueReferences } = require('./parse-linked-issues.cjs');
+const { parseLinkedIssues } = require('./parse-linked-issues.cjs');
 
-test('a closing reference that only appears inside an HTML comment is not a linked issue', () => {
+const closing = (number) => ({ number, kind: 'closing' });
+const nonClosing = (number) => ({ number, kind: 'non-closing' });
+const ok = (...references) => ({ references, errors: [] });
+
+test('references inside HTML comments are ignored; an unclosed comment hides the rest', () => {
+  const cases = [
+    ['## Summary\n\n<!--\nCloses #42\n-->\n\nSome visible text.', []],
+    ['Closes #1770\n\n<!--\nExample: Closes #42\n-->', [closing(1770)]],
+    ['Fixes #7\n<!-- Closes #42 --> trailing visible text', [closing(7)]],
+    ['Closes #10\n<!-- Refs #42 -->', [closing(10)]],
+    ['Closes #1770\n<!-- forgot to close this comment\nCloses #42', [closing(1770)]],
+  ];
+  for (const [body, references] of cases) {
+    assert.deepEqual(parseLinkedIssues(body), ok(...references));
+  }
+});
+
+test('Markdown reference definitions are ignored while visible references remain', () => {
   const body = [
-    '## Summary',
+    '[x]: https://example.invalid "Refs #42"',
+    '[y]: https://example.invalid "Closes owner/repo#7"',
     '',
-    '<!--',
-    'Link the approved issue this PR resolves, e.g.:',
-    'Closes #42',
-    '-->',
-    '',
-    'Some visible description without any reference.',
+    'Refs #43',
+    'Closes #44',
   ].join('\n');
 
-  assert.deepEqual(parseLinkedIssues(body), []);
-  assert.deepEqual(parseIssueReferences(body), { closing: [], nonClosing: [], all: [] });
+  assert.deepEqual(parseLinkedIssues(body), ok(nonClosing(43), closing(44)));
 });
 
-test('a non-closing reference that only appears inside an HTML comment is ignored', () => {
-  const body = [
-    '## Summary',
-    '',
-    '<!--',
-    'Refs #3154',
-    '-->',
-    '',
-    'Some visible description without any reference.',
-  ].join('\n');
-
-  assert.deepEqual(parseLinkedIssues(body), []);
-  assert.deepEqual(parseIssueReferences(body), { closing: [], nonClosing: [], all: [] });
+test('closing and non-closing references are kind-tagged, in order of appearance', () => {
+  const cases = [
+    ['Closes #10\nFixes #11\nResolves #12', [closing(10), closing(11), closing(12)]],
+    ['Refs #1770', [nonClosing(1770)]],
+    ['refs #7', [nonClosing(7)]],
+    ['Closes #10\nRefs #11\nFixes #12\nResolves #13', [closing(10), nonClosing(11), closing(12), closing(13)]],
+  ];
+  for (const [body, references] of cases) {
+    assert.deepEqual(parseLinkedIssues(body), ok(...references));
+  }
 });
 
-test('a real reference outside a comment plus the template example inside one finds exactly the real one', () => {
-  const body = [
-    'Closes #1770',
-    '',
-    '<!--',
-    'Example: Closes #42',
-    '-->',
-  ].join('\n');
-
-  assert.deepEqual(parseLinkedIssues(body), [1770]);
-  assert.deepEqual(parseIssueReferences(body), { closing: [1770], nonClosing: [], all: [1770] });
+test('an empty or missing body yields no references and no errors', () => {
+  for (const body of ['', null, undefined]) {
+    assert.deepEqual(parseLinkedIssues(body), ok());
+  }
 });
 
-test('a single-line HTML comment is also ignored', () => {
-  const body = 'Fixes #7\n<!-- Closes #42 --> trailing visible text';
-
-  assert.deepEqual(parseLinkedIssues(body), [7]);
-  assert.deepEqual(parseIssueReferences(body), { closing: [7], nonClosing: [], all: [7] });
+test('malformed and cross-repository keyword references fail closed with raw and reason', () => {
+  const cases = [
+    ['Closes #abc', /malformed/i],
+    ['Refs #', /malformed/i],
+    ['Refs #12foo', /malformed/i],
+    ['Refs #12_bar', /malformed/i],
+    ['Fixes #7x', /malformed/i],
+    ['Closes gentleman-programming/gentle-ai#42', /cross-repositor/i],
+    ['Refs other/owner#7', /cross-repositor/i],
+    ['Resolves upstream/repo#99', /cross-repositor/i],
+    ['Closes owner/repo#abc', /cross-repositor/i],
+    ['Refs owner/repo#abc', /cross-repositor/i],
+    ['Refs owner/#7', /cross-repositor/i],
+    ['Refs /repo#7', /cross-repositor/i],
+    ['Resolves upstream/repo#', /cross-repositor/i],
+  ];
+  for (const [body, reason] of cases) {
+    const result = parseLinkedIssues(body);
+    assert.deepEqual(result.references, [], `expected no references for: ${body}`);
+    assert.equal(result.errors.length, 1, `expected one error for: ${body}`);
+    assert.equal(result.errors[0].raw, body);
+    assert.match(result.errors[0].reason, reason);
+  }
 });
 
-test('multiple visible closing references are all preserved, in order', () => {
-  const body = 'Closes #10\nFixes #11\nResolves #12';
+test('slash-heavy text without a hash is not a cross-repository reference', () => {
+  const body = `Refs ${'segment/'.repeat(10_000)}tail`;
 
-  assert.deepEqual(parseLinkedIssues(body), [10, 11, 12]);
-  assert.deepEqual(parseIssueReferences(body), {
-    closing: [10, 11, 12],
-    nonClosing: [],
-    all: [10, 11, 12],
-  });
+  assert.deepEqual(parseLinkedIssues(body), ok());
 });
 
-test('non-closing references (Refs #N, Ref #N, References #N) are distinguished from closing references', () => {
-  const body = [
-    '## Summary',
-    '',
-    'Closes #3352',
-    'Refs #3154',
-    'Ref #2000',
-    'References #2001',
-  ].join('\n');
-
-  assert.deepEqual(parseLinkedIssues(body), [3352, 3154, 2000, 2001]);
-  assert.deepEqual(parseIssueReferences(body), {
-    closing: [3352],
-    nonClosing: [3154, 2000, 2001],
-    all: [3352, 3154, 2000, 2001],
-  });
+test('a valid reference next to a malformed one still fails closed, reporting both', () => {
+  const result = parseLinkedIssues('Closes #1770\nRefs #oops');
+  assert.deepEqual(result.references, [closing(1770)]);
+  assert.equal(result.errors.length, 1);
+  assert.match(result.errors[0].raw, /Refs #oops/);
+  assert.match(result.errors[0].reason, /malformed/i);
 });
 
-test('non-closing reference only satisfies parse and pr-check without closing keywords', () => {
-  const body = 'Intermediate epic PR. Refs #3154';
-
-  assert.deepEqual(parseLinkedIssues(body), [3154]);
-  assert.deepEqual(parseIssueReferences(body), {
-    closing: [],
-    nonClosing: [3154],
-    all: [3154],
-  });
+test('punctuation after a valid reference is accepted, never treated as malformed', () => {
+  for (const [body, kind] of [
+    ['Closes #42.', 'closing'],
+    ['Refs #42,', 'non-closing'],
+    ['Closes #42', 'closing'],
+  ]) {
+    assert.deepEqual(parseLinkedIssues(body), ok({ number: 42, kind }));
+  }
 });
 
-test('duplicate references in the body are deduplicated while preserving first-appearance order', () => {
-  const body = [
-    'Closes #10',
-    'Refs #20',
-    'Closes #10',
-    'Refs #20',
-    'Fixes #30',
-  ].join('\n');
-
-  assert.deepEqual(parseLinkedIssues(body), [10, 20, 30]);
-  assert.deepEqual(parseIssueReferences(body), {
-    closing: [10, 30],
-    nonClosing: [20],
-    all: [10, 20, 30],
-  });
+test('ordinary prose containing closing words is not a reference', () => {
+  const body =
+    'This PR closes the loop on the earlier discussion and resolves the confusion about whether the pipeline refs the right target.';
+  assert.deepEqual(parseLinkedIssues(body), ok());
 });
 
-test('case insensitivity for keywords', () => {
-  const body = 'closes #10 fixes #11 RESOLVES #12 REFS #13 ref #14';
-
-  assert.deepEqual(parseLinkedIssues(body), [10, 11, 12, 13, 14]);
-  assert.deepEqual(parseIssueReferences(body), {
-    closing: [10, 11, 12],
-    nonClosing: [13, 14],
-    all: [10, 11, 12, 13, 14],
-  });
-});
-
-// Documented behavior: an unclosed `<!--` hides everything through the end of
-// the body. This matches how GitHub renders Markdown (the HTML spec closes an
-// open comment at end of input), so a reference after an unclosed `<!--` is
-// invisible to reviewers and must not count as a linked issue.
-test('an unclosed HTML comment hides the rest of the body, matching rendered output', () => {
-  const body = 'Closes #1770\n<!-- forgot to close this comment\nCloses #42\nRefs #99';
-
-  assert.deepEqual(parseLinkedIssues(body), [1770]);
-  assert.deepEqual(parseIssueReferences(body), { closing: [1770], nonClosing: [], all: [1770] });
-});
-
-test('an empty or missing body yields no linked issues', () => {
-  assert.deepEqual(parseLinkedIssues(''), []);
-  assert.deepEqual(parseLinkedIssues(null), []);
-  assert.deepEqual(parseLinkedIssues(undefined), []);
-  assert.deepEqual(parseIssueReferences(''), { closing: [], nonClosing: [], all: [] });
-  assert.deepEqual(parseIssueReferences(null), { closing: [], nonClosing: [], all: [] });
-  assert.deepEqual(parseIssueReferences(undefined), { closing: [], nonClosing: [], all: [] });
+test('the same issue as both closing and non-closing is ambiguous and fails closed', () => {
+  const result = parseLinkedIssues('Closes #42\nRefs #42');
+  assert.equal(result.references.length, 2);
+  assert.equal(result.errors.length, 1);
+  assert.match(result.errors[0].raw, /#42/);
+  assert.match(result.errors[0].reason, /ambiguous/i);
 });
