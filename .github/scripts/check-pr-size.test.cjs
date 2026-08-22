@@ -4,158 +4,147 @@ const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
-const os = require('node:os');
 
 const {
-  evaluatePrSize,
-  loadGrandfatherExceptions,
   REVIEW_BUDGET_LIMIT,
+  evaluatePrSize,
+  loadPolicy,
+  parsePolicy,
+  validatePolicyTransition,
 } = require('./check-pr-size.cjs');
 
-test('standard PR within 400-line budget passes', () => {
-  const result = evaluatePrSize({ additions: 150, deletions: 50, labels: [], prNumber: 100 });
-  assert.equal(result.pass, true);
-  assert.equal(result.passed, true);
-  assert.equal(result.warning, false);
-  assert.equal(result.total, 200);
-});
+const policyPath = path.join(__dirname, '..', 'grandfather-size-exceptions.json');
+const workflowPath = path.join(__dirname, '..', 'workflows', 'pr-size-policy.yml');
 
-test('PR exactly at 400 lines budget passes', () => {
-  const result = evaluatePrSize({ additions: 300, deletions: 100, labels: [], prNumber: 101 });
-  assert.equal(result.pass, true);
-  assert.equal(result.warning, false);
+function dormantPolicy(overrides = {}) {
+  return {
+    version: 1,
+    enforcement: 'dormant',
+    limit: REVIEW_BUDGET_LIMIT,
+    activation_snapshot: null,
+    grandfathered_prs: [],
+    ...overrides,
+  };
+}
+
+function pullRequest(overrides = {}) {
+  return {
+    number: 3586,
+    additions: 200,
+    deletions: 200,
+    labels: [],
+    ...overrides,
+  };
+}
+
+test('400 is within the dormant review budget', () => {
+  const result = evaluatePrSize(pullRequest(), dormantPolicy());
+
   assert.equal(result.total, 400);
+  assert.equal(result.outcome, 'pass');
+  assert.equal(result.enforced, false);
 });
 
-test('oversized PR (401 lines) without grandfathering fails even with size:exception label', () => {
-  const result = evaluatePrSize({
-    additions: 301,
-    deletions: 100,
-    labels: ['size:exception'],
-    prNumber: 999,
-    grandfatherSet: new Set([100, 200]),
-  });
-  assert.equal(result.pass, false);
-  assert.equal(result.passed, false);
-  assert.equal(result.warning, false);
+test('401 is reported but not enforced while the policy is dormant', () => {
+  const result = evaluatePrSize(pullRequest({ additions: 401, deletions: 0 }), dormantPolicy());
+
   assert.equal(result.total, 401);
-  assert.match(result.message, /New oversized PRs are not permitted even with size:exception/);
+  assert.equal(result.outcome, 'warning');
+  assert.equal(result.enforced, false);
+  assert.match(result.message, /dormant/i);
 });
 
-test('oversized PR without grandfathering and without label fails', () => {
-  const result = evaluatePrSize({ additions: 500, deletions: 200, labels: [], prNumber: 999 });
-  assert.equal(result.pass, false);
-  assert.equal(result.warning, false);
-  assert.equal(result.total, 700);
+test('missing, null, non-integer, and negative API counts fail closed', () => {
+  for (const additions of [undefined, null, '400', 400.5, -1]) {
+    assert.throws(
+      () => evaluatePrSize(pullRequest({ additions }), dormantPolicy()),
+      /additions must be a non-negative integer/
+    );
+  }
+
+  for (const deletions of [undefined, null, '0', 0.5, -1]) {
+    assert.throws(
+      () => evaluatePrSize(pullRequest({ deletions }), dormantPolicy()),
+      /deletions must be a non-negative integer/
+    );
+  }
 });
 
-test('oversized PR with grandfathering AND size:exception passes with warning', () => {
-  const result = evaluatePrSize({
-    additions: 450,
-    deletions: 50,
-    labels: ['size:exception'],
-    prNumber: 100,
-    grandfatherSet: new Set([100]),
-  });
-  assert.equal(result.pass, true);
-  assert.equal(result.passed, true);
-  assert.equal(result.warning, true);
-  assert.equal(result.total, 500);
-  assert.match(result.message, /Grandfathered PR #100 with size:exception/);
-});
+test('policy is strict, versioned, dormant, and has an empty snapshot', () => {
+  const policy = parsePolicy(fs.readFileSync(policyPath, 'utf8'));
 
-test('oversized PR with grandfathering supports label objects', () => {
-  const result = evaluatePrSize({
-    additions: 450,
-    deletions: 50,
-    labels: [{ name: 'size:exception' }, { name: 'type:feature' }],
-    prNumber: 100,
-    grandfatherSet: new Set([100]),
-  });
-  assert.equal(result.pass, true);
-  assert.equal(result.warning, true);
-});
-
-test('oversized PR with grandfathering but WITHOUT size:exception fails', () => {
-  const result = evaluatePrSize({
-    additions: 450,
-    deletions: 50,
-    labels: ['type:feature'],
-    prNumber: 100,
-    grandfatherSet: new Set([100]),
-  });
-  assert.equal(result.pass, false);
-  assert.equal(result.passed, false);
-  assert.equal(result.warning, false);
-  assert.equal(result.total, 500);
-  assert.match(result.message, /requires the 'size:exception' label/);
-});
-
-test('loadGrandfatherExceptions parses valid grandfather json file', () => {
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pr-size-test-'));
-  const filePath = path.join(tmpDir, 'valid.json');
-  fs.writeFileSync(filePath, JSON.stringify({ version: 1, allowed_prs: [42, 100, 200] }));
-
-  const set = loadGrandfatherExceptions(filePath);
-  assert.equal(set instanceof Set, true);
-  assert.equal(set.size, 3);
-  assert.equal(set.has(42), true);
-  assert.equal(set.has(100), true);
-  assert.equal(set.has(200), true);
-  assert.equal(set.has(300), false);
-
-  fs.rmSync(tmpDir, { recursive: true, force: true });
-});
-
-test('loadGrandfatherExceptions loads repository grandfather file', () => {
-  const repoFilePath = path.join(__dirname, '..', 'grandfather-size-exceptions.json');
-  const set = loadGrandfatherExceptions(repoFilePath);
-  assert.equal(set instanceof Set, true);
-});
-
-test('loadGrandfatherExceptions fails closed if file is missing', () => {
+  assert.deepEqual(policy, dormantPolicy());
   assert.throws(
-    () => loadGrandfatherExceptions('/non/existent/path/exceptions.json'),
-    /Grandfather exceptions file not found/
+    () => parsePolicy(JSON.stringify(dormantPolicy({ unknown: true }))),
+    /unexpected keys/
+  );
+  assert.throws(() => parsePolicy('{}'), /missing keys/);
+  assert.throws(() => parsePolicy('{'), /malformed JSON/);
+  assert.throws(() => loadPolicy(''), /unreadable or invalid/);
+});
+
+test('policy rejects duplicate and invalid grandfather IDs', () => {
+  assert.throws(
+    () => parsePolicy(JSON.stringify(dormantPolicy({ grandfathered_prs: [7, 7] }))),
+    /duplicate PR number/
+  );
+  assert.throws(
+    () => parsePolicy(JSON.stringify(dormantPolicy({ grandfathered_prs: [0] }))),
+    /positive integers/
   );
 });
 
-test('loadGrandfatherExceptions fails closed if path is invalid', () => {
-  assert.throws(() => loadGrandfatherExceptions(''), /non-empty string/);
-  assert.throws(() => loadGrandfatherExceptions(null), /non-empty string/);
+test('policy transitions allow only closed or merged grandfather removals after activation', () => {
+  const active = {
+    version: 1,
+    enforcement: 'enforcing',
+    limit: REVIEW_BUDGET_LIMIT,
+    activation_snapshot: [7, 8],
+    grandfathered_prs: [7, 8],
+  };
+
+  assert.deepEqual(
+    validatePolicyTransition(dormantPolicy(), active, {
+      activationPullRequests: [
+        { number: 7, state: 'open', labels: ['size:exception'] },
+        { number: 8, state: 'open', labels: ['size:exception'] },
+      ],
+    }),
+    { valid: true }
+  );
+  assert.throws(
+    () => validatePolicyTransition(dormantPolicy(), active, { activationPullRequests: [{ number: 7, state: 'closed', labels: ['size:exception'] }] }),
+    /not qualified at activation/
+  );
+  assert.equal(evaluatePrSize(pullRequest({ number: 7, additions: 401, deletions: 0 }), active).enforced, false);
+  assert.deepEqual(
+    validatePolicyTransition(active, { ...active, grandfathered_prs: [7] }, { closedOrMergedPullRequests: [{ number: 8, state: 'closed' }] }),
+    { valid: true }
+  );
+  assert.throws(
+    () => validatePolicyTransition(active, { ...active, grandfathered_prs: [7] }, { closedOrMergedPullRequests: [] }),
+    /not proven closed or merged/
+  );
+  assert.throws(
+    () => validatePolicyTransition(active, { ...active, grandfathered_prs: [7, 8, 9] }),
+    /post-snapshot additions/
+  );
 });
 
-test('loadGrandfatherExceptions fails closed if JSON is malformed', () => {
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pr-size-test-'));
-  const filePath = path.join(tmpDir, 'malformed.json');
-  fs.writeFileSync(filePath, '{ invalid json');
+test('workflow is trusted, read-only, and never evaluates merge queue or candidate bytes', () => {
+  const workflow = fs.readFileSync(workflowPath, 'utf8');
 
-  assert.throws(() => loadGrandfatherExceptions(filePath), /malformed JSON/);
-  fs.rmSync(tmpDir, { recursive: true, force: true });
-});
-
-test('loadGrandfatherExceptions fails closed if schema/version is invalid', () => {
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pr-size-test-'));
-
-  const badVersion = path.join(tmpDir, 'bad-version.json');
-  fs.writeFileSync(badVersion, JSON.stringify({ version: 2, allowed_prs: [] }));
-  assert.throws(() => loadGrandfatherExceptions(badVersion), /invalid schema/);
-
-  const missingAllowed = path.join(tmpDir, 'missing-allowed.json');
-  fs.writeFileSync(missingAllowed, JSON.stringify({ version: 1 }));
-  assert.throws(() => loadGrandfatherExceptions(missingAllowed), /invalid schema/);
-
-  const badAllowedType = path.join(tmpDir, 'bad-allowed-type.json');
-  fs.writeFileSync(badAllowedType, JSON.stringify({ version: 1, allowed_prs: "42" }));
-  assert.throws(() => loadGrandfatherExceptions(badAllowedType), /invalid schema/);
-
-  const invalidPrElement = path.join(tmpDir, 'invalid-pr-element.json');
-  fs.writeFileSync(invalidPrElement, JSON.stringify({ version: 1, allowed_prs: [42, "100"] }));
-  assert.throws(() => loadGrandfatherExceptions(invalidPrElement), /Invalid PR number/);
-
-  const negativePrElement = path.join(tmpDir, 'negative-pr-element.json');
-  fs.writeFileSync(negativePrElement, JSON.stringify({ version: 1, allowed_prs: [-5] }));
-  assert.throws(() => loadGrandfatherExceptions(negativePrElement), /Invalid PR number/);
-
-  fs.rmSync(tmpDir, { recursive: true, force: true });
+  assert.match(workflow, /pull_request_target:/);
+  assert.match(workflow, /types: \[opened, reopened, synchronize, edited, labeled, unlabeled\]/);
+  assert.match(workflow, /contents: read/);
+  assert.match(workflow, /pull-requests: read/);
+  assert.match(workflow, /issues: read/);
+  assert.match(workflow, /ref: \$\{\{ github\.event\.repository\.default_branch \}\}/);
+  assert.match(workflow, /persist-credentials: false/);
+  assert.match(workflow, /sparse-checkout: \|/);
+  assert.match(workflow, /github\.rest\.pulls\.get/);
+  assert.match(workflow, /Unable to read live PR facts/);
+  assert.doesNotMatch(workflow, /merge_group/);
+  assert.doesNotMatch(workflow, /refs\/pull/);
+  assert.doesNotMatch(workflow, /github\.event\.pull_request\.head/);
 });

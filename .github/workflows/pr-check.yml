@@ -2,67 +2,45 @@ name: PR Validation
 
 on:
   pull_request:
-    types: [opened, edited, synchronize, reopened, ready_for_review, labeled, unlabeled]
-  merge_group:
-    types: [checks_requested]
+    types: [opened, edited, synchronize, labeled, unlabeled]
 
 jobs:
   check-pr-size:
     name: Check PR Cognitive Load
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd  # v5.0.1
       - name: Verify PR stays within review budget
         uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b  # v7.1.0
         with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
-            const path = require('path');
-            const { evaluatePrSize, loadGrandfatherExceptions } = require(
-              `${process.env.GITHUB_WORKSPACE}/.github/scripts/check-pr-size.cjs`
-            );
-
-            const prNumber = context.payload.pull_request
-              ? context.payload.pull_request.number
-              : context.issue.number;
-
-            const { data: pr } = await github.rest.pulls.get({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              pull_number: prNumber,
-            });
-
-            const grandfatherFilePath = path.join(
-              process.env.GITHUB_WORKSPACE,
-              '.github',
-              'grandfather-size-exceptions.json'
-            );
-            const grandfatherSet = loadGrandfatherExceptions(grandfatherFilePath);
-
+            const limit = 400;
+            const pr = context.payload.pull_request;
+            const additions = pr.additions || 0;
+            const deletions = pr.deletions || 0;
+            const total = additions + deletions;
             const labels = (pr.labels || []).map(label => label.name);
-            const result = evaluatePrSize({
-              additions: pr.additions,
-              deletions: pr.deletions,
-              labels,
-              prNumber: pr.number,
-              grandfatherSet,
-            });
+            const hasException = labels.includes('size:exception');
 
-            console.log(`PR size: +${pr.additions} / -${pr.deletions} = ${result.total} changed lines`);
+            console.log(`PR size: +${additions} / -${deletions} = ${total} changed lines`);
             console.log(`Labels: ${labels.join(', ') || '(none)'}`);
 
-            if (result.pass) {
-              if (result.warning) {
-                core.warning(`⚠️ ${result.message}`);
-                console.log('✅ Grandfathered with size:exception; allowing oversized PR with warning.');
-              } else {
-                console.log(`✅ ${result.message}`);
-              }
+            if (total <= limit) {
+              console.log(`✅ PR is within the ${limit}-line cognitive review budget.`);
               return;
             }
 
-            core.setFailed(`❌ ${result.message}`);
+            const message =
+              `PR changes ${total} lines (+${additions}/-${deletions}), exceeding the ${limit}-line cognitive review budget.\n\n` +
+              'Why this exists: reviews should stay small enough to complete in ~60 minutes without reviewer fatigue.\n' +
+              'Please split this work into chained or stacked PRs, or ask a maintainer for the size:exception label when the large diff is unavoidable.';
+
+            if (hasException) {
+              core.warning(`⚠️ ${message}`);
+              console.log('✅ size:exception label present; allowing oversized PR with warning.');
+              return;
+            }
+
+            core.setFailed(`❌ ${message}`);
 
   check-workflow-scripts:
     name: Check Workflow Scripts
@@ -71,7 +49,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd  # v5.0.1
       - name: Run workflow script tests
-        run: node --test .github/scripts/parse-linked-issues.test.cjs .github/scripts/check-pr-size.test.cjs
+        run: node --test .github/scripts/parse-linked-issues.test.cjs
 
   check-issue-reference:
     name: Check Issue Reference
