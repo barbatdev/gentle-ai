@@ -2,7 +2,9 @@ package sdd
 
 import (
 	"bytes"
+	"crypto/sha256"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -1163,6 +1165,171 @@ PRESERVE_THIS_UNRELATED_SECTION exactly as authored.
 		firstEnd := min(len(prompt), diffAt+160)
 		secondEnd := min(len(secondPrompt), diffAt+160)
 		t.Fatalf("preserved v1 Review Execution Contract migration is not idempotent at byte %d\nfirst:  %q\nsecond: %q", diffAt, prompt[start:firstEnd], secondPrompt[start:secondEnd])
+	}
+}
+
+func TestManagedPreflightHistoricalOwnershipIsFrozen(t *testing.T) {
+	source, err := os.ReadFile("inject.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	variantSource := string(source)
+	variantStart := strings.Index(variantSource, "func isManagedPreflightHistoricalDigest(")
+	if variantStart < 0 {
+		t.Fatal("historical digest allowlist source start not found")
+	}
+	variantEnd := strings.Index(variantSource[variantStart:], "\n\nfunc managedPreflightBody(")
+	if variantEnd < 0 {
+		t.Fatal("historical digest allowlist source end not found")
+	}
+	variantSource = variantSource[variantStart : variantStart+variantEnd]
+	for _, forbidden := range []string{"strings.ReplaceAll", "strings.NewReplacer", "currentOpenCodeManagedPreflight"} {
+		if strings.Contains(variantSource, forbidden) {
+			t.Errorf("managed preflight ownership derives history from current template via %q", forbidden)
+		}
+	}
+
+	boundsStart := strings.Index(string(source), "func managedPreflightBounds(")
+	if boundsStart < 0 {
+		t.Fatal("managedPreflightBounds source start not found")
+	}
+	boundsEnd := strings.Index(string(source)[boundsStart:], "\n\nfunc ensurePreservedOpenCodeOrchestratorPreflight(")
+	if boundsEnd < 0 {
+		t.Fatal("managedPreflightBounds source end not found")
+	}
+	boundsSource := string(source)[boundsStart : boundsStart+boundsEnd]
+	for _, forbidden := range []string{"strings.ReplaceAll", "strings.NewReplacer"} {
+		if strings.Contains(boundsSource, forbidden) {
+			t.Errorf("managed preflight bounds derives history via %q", forbidden)
+		}
+	}
+}
+
+func TestInjectOpenCodeClassifiesManagedPreflightOwnership(t *testing.T) {
+	const (
+		start = "<!-- gentle-ai:sdd-session-preflight-migration -->"
+		end   = "<!-- /gentle-ai:sdd-session-preflight-migration -->"
+	)
+	current := ensurePreservedOpenCodeOrchestratorPreflight("")
+	currentStart := strings.Index(current, start)
+	currentEnd := strings.Index(current, end) + len(end)
+	if currentStart < 0 || currentEnd < currentStart {
+		t.Fatal("current preflight is missing managed markers")
+	}
+	canonical := current[currentStart:currentEnd]
+	legacyMapping := strings.ReplaceAll(canonical,
+		"Ask me -> `ask-on-risk`; Single PR -> `single-pr`; Auto -> `auto-chain`",
+		"Ask me -> `ask-always`; Single PR -> `single-pr-default`; Auto -> `auto-forecast`")
+	legacyChained := strings.NewReplacer(
+		"3. PRs: Ask me, Single PR, Auto.", "3. PRs: Ask me, Single PR, Chained, Auto.",
+		"Ask me -> `ask-on-risk`; Single PR -> `single-pr`; Auto -> `auto-chain`", "Ask me -> `ask-on-risk`; Single PR -> `single-pr`; Chained -> `auto-chain`; Auto -> `auto-chain`",
+		"The preflight offers no separate chained option because `delivery_strategy` is only consulted once the tasks forecast flags review-budget risk: below that line there is nothing to chain, and above it `Auto` already resolves to `auto-chain`.", "Chained and Auto both resolve to `auto-chain` because `delivery_strategy` is only consulted once the tasks forecast flags review-budget risk.",
+	).Replace(canonical)
+	legacyPlainChat := `<!-- gentle-ai:sdd-session-preflight-migration -->
+### SDD Session Preflight (HARD GATE)
+
+Before executing ANY SDD command or natural-language SDD request, ensure this session has an explicit preflight.
+
+Match the user's current language.
+Do NOT mix languages inside one preflight prompt.
+If the current language is Spanish, use the Spanish localized shape below verbatim.
+Before continuing with SDD, choose one option per group.
+Antes de continuar con SDD, elegí una opción por grupo.
+Respondé con "usar recomendado" o con códigos como: A1, B1, C1, D1.
+Hard gate rules:
+- openspec/config.yaml does NOT satisfy session preflight.
+- Never launch ` + "`sdd-apply`" + ` just because the user asked to implement a feature.
+- In interactive mode, pause after each delegated phase returns and ask: "¿Querés ajustar algo o continuamos?".
+<!-- /gentle-ai:sdd-session-preflight-migration -->`
+
+	run := func(t *testing.T, prompt string) (string, error) {
+		t.Helper()
+		home := t.TempDir()
+		mockNoPackageManager(t)
+		settingsPath := filepath.Join(home, ".config", "opencode", "opencode.json")
+		if err := os.MkdirAll(filepath.Dir(settingsPath), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(settingsPath, []byte(`{"agent":{"gentle-orchestrator":{"prompt":`+strconv.Quote(prompt)+`}}}`), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		_, err := Inject(home, opencodeAdapter(), model.SDDModeMulti, InjectOptions{PreserveOpenCodeOrchestratorPrompt: true})
+		got := readGentleOrchestratorPrompt(t, settingsPath)
+		return got, err
+	}
+
+	const prefix = "CUSTOM_PREFIX\r\n\n"
+	const tail = "\n\nCUSTOM_TAIL\r\n"
+	for _, tc := range []struct {
+		name, body, digest string
+	}{
+		{"current", canonical, ""},
+		{"retired-delivery-mapping", legacyMapping, "39109329b73ed297f81636c95d0ad6ce677ce1eac47cd456055317c46cce2cc2"},
+		{"retired-chained-option", legacyChained, "0c7fc645cc71908e4eee43d217e5657fb5ec45a76c9077176e6666cbadfa989e"},
+		{"plain-chat-preflight", legacyPlainChat, "268f3480a4652c57a7e286533f207f42a712d5100be2698c57971c9c9fdb1c7d"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if tc.digest != "" {
+				if digest := fmt.Sprintf("%x", sha256.Sum256([]byte(tc.body))); digest != tc.digest {
+					t.Fatalf("%s fixture digest = %s, want independently pinned %s", tc.name, digest, tc.digest)
+				}
+			}
+			got, err := run(t, prefix+tc.body+tail)
+			if err != nil {
+				t.Fatalf("Inject() error = %v", err)
+			}
+			if !strings.Contains(got, prefix+canonical+tail) {
+				t.Fatalf("Inject() did not preserve prefix/tail or migrate exact preflight:\n%q", got)
+			}
+		})
+	}
+
+	t.Run("exact-current-is-idempotent", func(t *testing.T) {
+		first, err := run(t, prefix+canonical+tail)
+		if err != nil {
+			t.Fatalf("first Inject() error = %v", err)
+		}
+		second, err := run(t, first)
+		if err != nil {
+			t.Fatalf("second Inject() error = %v", err)
+		}
+		if second != first {
+			t.Fatalf("exact current preflight is not idempotent\nfirst:  %q\nsecond: %q", first, second)
+		}
+	})
+
+	t.Run("no-markers-append-without-trimming", func(t *testing.T) {
+		const unmanaged = "UNMANAGED_BYTES\r\n\n\n"
+		got, err := run(t, unmanaged)
+		if err != nil {
+			t.Fatalf("Inject() error = %v", err)
+		}
+		if !strings.Contains(got, unmanaged+current) {
+			t.Fatalf("Inject() changed unmanaged bytes or did not append canonical preflight:\n%q", got)
+		}
+	})
+
+	for _, tc := range []struct {
+		name, prompt string
+	}{
+		{"duplicate", canonical + "\nUSER_TEXT\n" + canonical},
+		{"unpaired", start + "\nUSER_TEXT"},
+		{"reversed", end + "\n" + start},
+		{"nested", start + "\n" + canonical + "\n" + end},
+		{"altered", strings.Replace(canonical, "Required preflight choices", "Altered preflight choices", 1)},
+		{"contradictory", strings.Replace(canonical, "Auto -> `auto-chain`", "Auto -> `single-pr`", 1)},
+		{"future-hybrid", strings.Replace(legacyMapping, "3. PRs: Ask me, Single PR, Auto.", "3. PRs: Ask me, Single PR, Chained, Auto.", 1)},
+		{"unknown", start + "\nUNKNOWN_MANAGED_BODY\n" + end},
+	} {
+		t.Run("reject-"+tc.name, func(t *testing.T) {
+			got, err := run(t, tc.prompt)
+			if !errors.Is(err, ErrAmbiguousManagedPreflight) {
+				t.Fatalf("Inject() error = %v, want ErrAmbiguousManagedPreflight", err)
+			}
+			if got != tc.prompt {
+				t.Fatalf("Inject() changed on-disk prompt before rejecting ambiguous ownership\nwant: %q\n got: %q", tc.prompt, got)
+			}
+		})
 	}
 }
 
