@@ -9,7 +9,7 @@ import (
 )
 
 func TestPublicBundledSkillsMatchEmbeddedAssets(t *testing.T) {
-	for _, skill := range []string{"systemic-issue-triage", "gentle-ai-bench", "chained-pr"} {
+	for _, skill := range []string{"systemic-issue-triage", "gentle-ai-bench", "chained-pr", "work-unit-commits"} {
 		t.Run(skill, func(t *testing.T) {
 			source, err := os.ReadFile(filepath.Join("..", "..", "skills", skill, "SKILL.md"))
 			if err != nil {
