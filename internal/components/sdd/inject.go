@@ -1,7 +1,9 @@
 package sdd
 
 import (
+	"crypto/sha256"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io/fs"
 	"os"
@@ -500,7 +502,7 @@ func Inject(homeDir string, adapter agents.Adapter, sddMode model.SDDModeID, opt
 				changed = changed || promptsChanged
 			}
 
-			overlayBytes, err = inlineOpenCodeSDDPrompts(overlayBytes, homeDir, settingsPath, adapter.Agent(), opts.PreserveOpenCodeOrchestratorPrompt, opts.orchestratorPolicyRenderOptions(), opts.CodeGraphGuidanceMarkdown)
+			overlayBytes, err = inlineOpenCodeSDDPrompts(overlayBytes, homeDir, settingsPath, adapter.Agent(), opts.PreserveOpenCodeOrchestratorPrompt && adapter.Agent() == model.AgentOpenCode, opts.orchestratorPolicyRenderOptions(), opts.CodeGraphGuidanceMarkdown)
 			if err != nil {
 				return InjectionResult{}, fmt.Errorf("inline OpenCode SDD prompts: %w", err)
 			}
@@ -876,6 +878,9 @@ func inlineOpenCodeSDDPrompts(overlayBytes []byte, homeDir, settingsPath string,
 			}
 		}
 		if existingPrompt != "" {
+			if _, _, err := managedPreflightBounds(existingPrompt); err != nil {
+				return nil, fmt.Errorf("validate preserved OpenCode preflight: %w", err)
+			}
 			if strings.Contains(existingPrompt, openCodeBackgroundPolicyMarker) || strings.Contains(existingPrompt, openCodeBackgroundPolicyEnd) {
 				if err := validateOpenCodeBackgroundPolicy(existingPrompt, false); err != nil {
 					return nil, fmt.Errorf("validate preserved OpenCode background policy: %w", err)
@@ -1047,8 +1052,8 @@ func migratePreservedOpenCodeOrchestratorPrompt(prompt string) string {
 		"Antes de continuar con SDD, elija una opción por grupo.\r\n",
 		"",
 	)
-	migrated := removeLegacyOpenCodePlainChatPreflightLines(replacer.Replace(prompt))
-	migrated = ensurePreservedOpenCodeOrchestratorPreflight(migrated)
+	migrated := ensurePreservedOpenCodeOrchestratorPreflight(prompt)
+	migrated = removeLegacyOpenCodePlainChatPreflightLines(replacer.Replace(migrated))
 	migrated = ensurePreservedOpenCodeDelegationHardGates(migrated)
 	migrated = ensurePreservedOpenCodeResearchLifecycle(migrated)
 	return ensurePreservedOpenCodeReviewExecutionContract(migrated)
@@ -1359,8 +1364,8 @@ func replacePreservedPromptSection(prompt string, start, end int, replacement st
 	return b.String()
 }
 
-func ensurePreservedOpenCodeOrchestratorPreflight(prompt string) string {
-	preflight := `
+func currentOpenCodeManagedPreflight() string {
+	return `
 
 <!-- gentle-ai:sdd-session-preflight-migration -->
 ### SDD Session Preflight (HARD GATE)
@@ -1404,45 +1409,86 @@ Hard gate rules:
 <!-- /gentle-ai:sdd-session-preflight-migration -->
 `
 
-	if strings.Contains(prompt, "### SDD Session Preflight (HARD GATE)") &&
-		strings.Contains(prompt, "openspec/config.yaml") &&
-		strings.Contains(prompt, "Never launch `sdd-apply`") &&
-		strings.Contains(prompt, "Match the user's current language") &&
-		strings.Contains(prompt, "Ask all four preflight groups in one single `question` tool call") &&
-		strings.Contains(prompt, "groups as tabs") &&
-		strings.Contains(prompt, "Do NOT run this as a sequential wizard") &&
-		strings.Contains(prompt, "Do NOT mix languages inside one grouped question") &&
-		strings.Contains(prompt, "map the selected human labels to canonical values internally") &&
-		// A preserved prompt written before the delivery-strategy vocabularies
-		// were reconciled still maps the PR options to `ask-always`,
-		// `single-pr-default`, `force-chained`, and `auto-forecast`, none of
-		// which any consumer branch matches. Every other clause here is
-		// satisfied by that stale text, so without this the broken mapping
-		// would survive every future sync.
-		strings.Contains(prompt, "Ask me -> `ask-on-risk`") &&
-		// The retired `Chained` PR option shipped alongside that corrected
-		// mapping, so a prompt still offering it satisfies every clause above,
-		// including the one directly overhead. Without this the four-option menu
-		// would survive every future sync and the asset-only removal would be
-		// reverted on the operator's next install.
-		strings.Contains(prompt, "3. PRs: Ask me, Single PR, Auto.") &&
-		strings.Contains(prompt, "pause after each delegated phase returns") &&
-		strings.Contains(prompt, "ask before launching the next phase via the `question` tool") &&
-		strings.Contains(prompt, "approve only the immediate next phase") &&
-		!containsOpenCodeOrchestratorLanguageLeak(prompt) {
+}
+
+var ErrAmbiguousManagedPreflight = errors.New("ambiguous managed preflight ownership")
+
+const (
+	managedPreflightStart = "<!-- gentle-ai:sdd-session-preflight-migration -->"
+	managedPreflightEnd   = "<!-- /gentle-ai:sdd-session-preflight-migration -->"
+
+	retiredDeliveryMappingPreflightSHA256             = "85d585ea210d60b787742737f39d2bd95222b1573f068f3d4204813a5af92f13"
+	retiredChainedOptionPreflightSHA256               = "0e32ee5365a785d96f2a58927ff18b963a8f0046725fd08a43091b9cb7c4cf6a"
+	retiredDeliveryMappingWithProposalPreflightSHA256 = "39109329b73ed297f81636c95d0ad6ce677ce1eac47cd456055317c46cce2cc2"
+	retiredChainedOptionWithProposalPreflightSHA256   = "0c7fc645cc71908e4eee43d217e5657fb5ec45a76c9077176e6666cbadfa989e"
+	plainChatPreflightSHA256                          = "268f3480a4652c57a7e286533f207f42a712d5100be2698c57971c9c9fdb1c7d"
+)
+
+func isManagedPreflightHistoricalDigest(digest string) bool {
+	switch digest {
+	case retiredDeliveryMappingPreflightSHA256,
+		retiredChainedOptionPreflightSHA256,
+		retiredDeliveryMappingWithProposalPreflightSHA256,
+		retiredChainedOptionWithProposalPreflightSHA256,
+		plainChatPreflightSHA256:
+		return true
+	default:
+		return false
+	}
+}
+
+func managedPreflightBody(prompt string) string {
+	start := strings.Index(prompt, managedPreflightStart)
+	if start < 0 {
+		return ""
+	}
+	end := strings.Index(prompt[start:], managedPreflightEnd)
+	if end < 0 {
+		return ""
+	}
+	return prompt[start : start+end+len(managedPreflightEnd)]
+}
+
+func managedPreflightBounds(prompt string) (int, int, error) {
+	starts := strings.Count(prompt, managedPreflightStart)
+	ends := strings.Count(prompt, managedPreflightEnd)
+	if starts == 0 && ends == 0 {
+		return -1, -1, nil
+	}
+	if starts != 1 || ends != 1 {
+		return 0, 0, ErrAmbiguousManagedPreflight
+	}
+	start := strings.Index(prompt, managedPreflightStart)
+	end := strings.Index(prompt[start+len(managedPreflightStart):], managedPreflightEnd)
+	if end < 0 {
+		return 0, 0, ErrAmbiguousManagedPreflight
+	}
+	end += start + len(managedPreflightStart) + len(managedPreflightEnd)
+	body := prompt[start:end]
+	if body == managedPreflightBody(currentOpenCodeManagedPreflight()) {
+		return start, end, nil
+	}
+	digest := fmt.Sprintf("%x", sha256.Sum256([]byte(body)))
+	if isManagedPreflightHistoricalDigest(digest) {
+		return start, end, nil
+	}
+	return 0, 0, ErrAmbiguousManagedPreflight
+}
+
+func ensurePreservedOpenCodeOrchestratorPreflight(prompt string) string {
+	start, end, err := managedPreflightBounds(prompt)
+	if err != nil {
 		return prompt
 	}
-
-	start := "<!-- gentle-ai:sdd-session-preflight-migration -->"
-	end := "<!-- /gentle-ai:sdd-session-preflight-migration -->"
-	if startIdx := strings.Index(prompt, start); startIdx >= 0 {
-		if relEndIdx := strings.Index(prompt[startIdx:], end); relEndIdx >= 0 {
-			endIdx := startIdx + relEndIdx + len(end)
-			return strings.TrimRight(prompt[:startIdx], "\n") + preflight + prompt[endIdx:]
-		}
+	current := currentOpenCodeManagedPreflight()
+	canonical := managedPreflightBody(current)
+	if start < 0 {
+		return prompt + current
 	}
-
-	return strings.TrimRight(prompt, "\n") + preflight
+	if prompt[start:end] == canonical {
+		return prompt
+	}
+	return prompt[:start] + canonical + prompt[end:]
 }
 
 func containsOpenCodeOrchestratorLanguageLeak(prompt string) bool {
