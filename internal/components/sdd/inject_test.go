@@ -2,7 +2,9 @@ package sdd
 
 import (
 	"bytes"
+	"crypto/sha256"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -1196,6 +1198,131 @@ func TestInjectOpenCodePreservesRoutingGuardAcrossMigratedPrompt(t *testing.T) {
 	}
 	if !strings.Contains(prompt, "Bind this to the dedicated `gentle-orchestrator` agent only.") {
 		t.Fatalf("migrated OpenCode prompt lost its orchestrator migration:\n%s", prompt)
+	}
+}
+
+func TestInjectOpenCodeMigratesOnlyKnownManagedPreflightBlocks(t *testing.T) {
+	const (
+		start = "<!-- gentle-ai:sdd-session-preflight-migration -->"
+		end   = "<!-- /gentle-ai:sdd-session-preflight-migration -->"
+	)
+	canonical := managedPreflightBody(currentOpenCodeManagedPreflight())
+	legacyMapping := strings.ReplaceAll(canonical,
+		"Ask me -> `ask-on-risk`; Single PR -> `single-pr`; Auto -> `auto-chain`",
+		"Ask me -> `ask-always`; Single PR -> `single-pr-default`; Auto -> `auto-forecast`")
+	legacyChained := strings.NewReplacer(
+		"3. PRs: Ask me, Single PR, Auto.", "3. PRs: Ask me, Single PR, Chained, Auto.",
+		"Ask me -> `ask-on-risk`; Single PR -> `single-pr`; Auto -> `auto-chain`", "Ask me -> `ask-on-risk`; Single PR -> `single-pr`; Chained -> `auto-chain`; Auto -> `auto-chain`",
+		"The preflight offers no separate chained option because `delivery_strategy` is only consulted once the tasks forecast flags review-budget risk: below that line there is nothing to chain, and above it `Auto` already resolves to `auto-chain`.", "Chained and Auto both resolve to `auto-chain` because `delivery_strategy` is only consulted once the tasks forecast flags review-budget risk.",
+	).Replace(canonical)
+	legacyPlainChat := `<!-- gentle-ai:sdd-session-preflight-migration -->
+### SDD Session Preflight (HARD GATE)
+
+Before executing ANY SDD command or natural-language SDD request, ensure this session has an explicit preflight.
+
+Match the user's current language.
+Do NOT mix languages inside one preflight prompt.
+If the current language is Spanish, use the Spanish localized shape below verbatim.
+Before continuing with SDD, choose one option per group.
+Antes de continuar con SDD, elegí una opción por grupo.
+Respondé con "usar recomendado" o con códigos como: A1, B1, C1, D1.
+Hard gate rules:
+- openspec/config.yaml does NOT satisfy session preflight.
+- Never launch ` + "`sdd-apply`" + ` just because the user asked to implement a feature.
+- In interactive mode, pause after each delegated phase returns and ask: "¿Querés ajustar algo o continuamos?".
+<!-- /gentle-ai:sdd-session-preflight-migration -->`
+
+	run := func(t *testing.T, prompt string) (string, error) {
+		t.Helper()
+		home := t.TempDir()
+		settingsPath := filepath.Join(home, ".config", "opencode", "opencode.json")
+		if err := os.MkdirAll(filepath.Dir(settingsPath), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(settingsPath, []byte(`{"agent":{"gentle-orchestrator":{"prompt":`+strconv.Quote(prompt)+`}}}`), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		_, err := Inject(home, opencodeAdapter(), model.SDDModeMulti, InjectOptions{PreserveOpenCodeOrchestratorPrompt: true})
+		return readGentleOrchestratorPrompt(t, settingsPath), err
+	}
+
+	const prefix = "USER_PREFIX\r\n\r\n"
+	const suffix = "\n\nUSER_SUFFIX\r\n"
+	for _, tc := range []struct {
+		name, body, digest string
+	}{
+		{name: "current", body: canonical},
+		{name: "retired delivery mapping", body: legacyMapping, digest: retiredDeliveryMappingPreflightSHA256},
+		{name: "retired chained option", body: legacyChained, digest: retiredChainedOptionPreflightSHA256},
+		{name: "plain chat", body: legacyPlainChat, digest: plainChatPreflightSHA256},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if tc.digest != "" {
+				if got := fmt.Sprintf("%x", sha256.Sum256([]byte(tc.body))); got != tc.digest {
+					t.Fatalf("fixture digest = %s, want pinned historical digest %s", got, tc.digest)
+				}
+			}
+			got, err := run(t, prefix+tc.body+suffix)
+			if err != nil {
+				t.Fatalf("Inject() error = %v", err)
+			}
+			if !strings.Contains(got, prefix+canonical+suffix) {
+				t.Fatalf("Inject() did not preserve user-owned bytes or migrate the exact managed block:\n%q", got)
+			}
+			resynced, err := run(t, got)
+			if err != nil {
+				t.Fatalf("second Inject() error = %v", err)
+			}
+			if resynced != got {
+				t.Fatalf("managed preflight migration is not idempotent\nfirst:  %q\nsecond: %q", got, resynced)
+			}
+		})
+	}
+
+	for _, tc := range []struct {
+		name, prompt string
+	}{
+		{name: "duplicate", prompt: canonical + "\nUSER_TEXT\n" + canonical},
+		{name: "unpaired", prompt: start + "\nUSER_TEXT"},
+		{name: "reversed", prompt: end + "\n" + start},
+		{name: "altered", prompt: strings.Replace(canonical, "Required preflight choices", "Altered preflight choices", 1)},
+		{name: "unknown", prompt: start + "\nUNKNOWN_MANAGED_BODY\n" + end},
+	} {
+		t.Run("reject "+tc.name, func(t *testing.T) {
+			got, err := run(t, tc.prompt)
+			if !errors.Is(err, ErrAmbiguousManagedPreflight) {
+				t.Fatalf("Inject() error = %v, want ErrAmbiguousManagedPreflight", err)
+			}
+			if got != tc.prompt {
+				t.Fatalf("Inject() changed the prompt before rejecting ambiguous ownership\nwant: %q\n got: %q", tc.prompt, got)
+			}
+		})
+	}
+}
+
+func TestInjectKilocodeKeepsLegacyOrchestratorBaseline(t *testing.T) {
+	home := t.TempDir()
+	adapter := kilocodeAdapter()
+	settingsPath := adapter.SettingsPath(home)
+	if err := os.MkdirAll(filepath.Dir(settingsPath), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(settingsPath, []byte(`{"agent":{"gentle-orchestrator":{"prompt":"USER_MANAGED_PROMPT"}}}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := Inject(home, adapter, model.SDDModeMulti, InjectOptions{
+		IncludeOpenCodeBackgroundPolicy:    true,
+		PreserveOpenCodeOrchestratorPrompt: true,
+	}); err != nil {
+		t.Fatalf("Inject(Kilocode) error = %v", err)
+	}
+	prompt := readGentleOrchestratorPrompt(t, settingsPath)
+	if strings.Contains(prompt, "USER_MANAGED_PROMPT") {
+		t.Fatal("Kilocode preserved an OpenCode-managed orchestrator prompt")
+	}
+	if strings.Contains(prompt, openCodeBackgroundPolicyMarker) {
+		t.Fatal("Kilocode received the OpenCode-only active orchestrator policy")
 	}
 }
 
