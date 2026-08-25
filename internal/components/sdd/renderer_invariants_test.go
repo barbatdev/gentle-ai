@@ -325,19 +325,22 @@ func TestOpenCodeNamedProfileOrchestratorPreservesCurrentContract(t *testing.T) 
 	}
 }
 
-func TestKilocodeOrchestratorBaselineSharesHistoricalAssetWithoutReviewLifecycle(t *testing.T) {
-	if got, want := sddOrchestratorAsset(model.AgentKilocode), sddOrchestratorAsset(model.AgentOpenCode); got != want {
-		t.Fatalf("Kilocode orchestrator asset = %q, want shared historical asset %q", got, want)
+func TestKilocodeOrchestratorBaselineUsesLegacyAssetWithoutReviewLifecycle(t *testing.T) {
+	if got, want := sddOrchestratorAsset(model.AgentKilocode), "opencode/sdd-orchestrator-kilocode-legacy.md"; got != want {
+		t.Fatalf("Kilocode orchestrator asset = %q, want legacy asset %q", got, want)
 	}
 
 	content := renderSDDOrchestratorAsset(model.AgentKilocode)
 	if strings.Contains(content, "### Authority-First Terminal Procedure") {
-		t.Fatal("Kilocode baseline received the shared review lifecycle")
+		t.Fatal("Kilocode legacy baseline received the active review lifecycle")
 	}
-	for _, want := range []string{"## SDD Workflow", "### Native SDD Dispatcher Guard", "### SDD Init Guard (MANDATORY)"} {
+	for _, want := range []string{"### SDD Session Preflight (HARD GATE)", "### Delivery Strategy", "### Review Workload Guard (MANDATORY)"} {
 		if !strings.Contains(content, want) {
-			t.Fatalf("Kilocode baseline lost normal SDD clause %q", want)
+			t.Fatalf("Kilocode legacy baseline lost historical SDD clause %q", want)
 		}
+	}
+	if strings.Contains(content, "### Native SDD Dispatcher Guard") {
+		t.Fatal("Kilocode legacy baseline received the active OpenCode dispatcher contract")
 	}
 
 	if strings.Contains(content, openCodeBackgroundPolicyMarker) {
