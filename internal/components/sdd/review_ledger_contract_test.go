@@ -356,6 +356,8 @@ func TestKilocodeReviewSettingsMatchCurrentMainBaseline(t *testing.T) {
 		t.Fatal(err)
 	}
 	got := fmt.Sprintf("%x", sha256.Sum256(settings))
+	// #3355 binds Kilocode to its dedicated legacy orchestrator asset, so this
+	// baseline is derived from that rendered asset rather than OpenCode's active one.
 	// Corrective verify cycle 5, CRITICAL-D: review-ledger-contract.md's
 	// Delivery section archive-gate sentence was corrected (see
 	// TestOpenCodeRenderedReviewProtocolCost's changelog comment above for
@@ -462,9 +464,9 @@ func TestKilocodeReviewSettingsMatchCurrentMainBaseline(t *testing.T) {
 	// settings hash is recomputed from the combined source.
 	// #3564 replaces the shared SDD status contract with v2, so the embedded
 	// pre-proposal contract now names the sole public status version.
-	const want = "421237bd384a32355c89991675d9251dd0696afe5209e0b57c0e5030661391b1"
+	const want = "e8c6843a515bcf835a4a5c4a76d96628458caa3e9dcebd03f06f667b0a85233f"
 	if got != want {
-		t.Fatalf("Kilocode settings SHA-256 = %s, want current-main baseline %s", got, want)
+		t.Fatalf("Kilocode settings SHA-256 = %s, want legacy baseline %s", got, want)
 	}
 }
 

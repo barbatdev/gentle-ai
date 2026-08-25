@@ -47,7 +47,7 @@ func TestSDDOrchestratorAssetSelectionCoversSupportedAgents(t *testing.T) {
 	}{
 		{model.AgentClaudeCode, "claude/sdd-orchestrator.md"},
 		{model.AgentOpenCode, "opencode/sdd-orchestrator.md"},
-		{model.AgentKilocode, "opencode/sdd-orchestrator.md"},
+		{model.AgentKilocode, "opencode/sdd-orchestrator-kilocode-legacy.md"},
 		{model.AgentGeminiCLI, "gemini/sdd-orchestrator.md"},
 		{model.AgentCursor, "cursor/sdd-orchestrator.md"},
 		{model.AgentVSCodeCopilot, "generic/sdd-orchestrator.md"},
@@ -68,24 +68,26 @@ func TestSDDOrchestratorAssetSelectionCoversSupportedAgents(t *testing.T) {
 			if got := sddOrchestratorAsset(tc.agent); got != tc.want {
 				t.Fatalf("sddOrchestratorAsset(%q) = %q, want %q", tc.agent, got, tc.want)
 			}
-			for _, required := range []string{
-				"exactly three semantic choices in this order",
-				"`report_and_continue`, `continue_without_reporting`, `stop_here`",
-				"Only after explicit consent and that final privacy scan",
-				"If no equivalent exists, create a new automated provider-defect report.",
-				"search open and closed issues",
-				"newly-created issue identity/URL",
-				"Only a definitive lookup may branch to GitHub mutation",
-				"If search, comment, or creation fails, is ambiguous, incomplete, times out, lacks permission, or has an unknown outcome",
-				"perform no further GitHub mutation and no blind retry",
-				"use the uncertainty continuation below",
-				"After a definitive successful report outcome, or any report-side uncertainty after stopping further GitHub mutation, execute the shared candidate-scoped continuation below.",
-				"Both continue choices execute that exact captured decline invocation exactly once",
-				"`consent: \"declined_this_candidate\"`",
-				"native negotiated STATUS",
-			} {
-				if !strings.Contains(renderSDDOrchestratorAsset(tc.agent), required) {
-					t.Fatalf("rendered %s orchestrator missing provider-defect handoff clause %q", tc.agent, required)
+			if tc.agent != model.AgentKilocode {
+				for _, required := range []string{
+					"exactly three semantic choices in this order",
+					"`report_and_continue`, `continue_without_reporting`, `stop_here`",
+					"Only after explicit consent and that final privacy scan",
+					"If no equivalent exists, create a new automated provider-defect report.",
+					"search open and closed issues",
+					"newly-created issue identity/URL",
+					"Only a definitive lookup may branch to GitHub mutation",
+					"If search, comment, or creation fails, is ambiguous, incomplete, times out, lacks permission, or has an unknown outcome",
+					"perform no further GitHub mutation and no blind retry",
+					"use the uncertainty continuation below",
+					"After a definitive successful report outcome, or any report-side uncertainty after stopping further GitHub mutation, execute the shared candidate-scoped continuation below.",
+					"Both continue choices execute that exact captured decline invocation exactly once",
+					"`consent: \"declined_this_candidate\"`",
+					"native negotiated STATUS",
+				} {
+					if !strings.Contains(renderSDDOrchestratorAsset(tc.agent), required) {
+						t.Fatalf("rendered %s orchestrator missing provider-defect handoff clause %q", tc.agent, required)
+					}
 				}
 			}
 			if strings.Contains(renderSDDOrchestratorAsset(tc.agent), "gentle-"+"report") {
@@ -1318,6 +1320,9 @@ func TestInjectKilocodeKeepsLegacyOrchestratorBaseline(t *testing.T) {
 		t.Fatalf("Inject(Kilocode) error = %v", err)
 	}
 	prompt := readGentleOrchestratorPrompt(t, settingsPath)
+	if want := assets.MustRead("opencode/sdd-orchestrator-kilocode-legacy.md"); prompt != want {
+		t.Fatalf("Kilocode injected orchestrator prompt did not render the exact legacy asset")
+	}
 	if strings.Contains(prompt, "USER_MANAGED_PROMPT") {
 		t.Fatal("Kilocode preserved an OpenCode-managed orchestrator prompt")
 	}
@@ -5051,7 +5056,7 @@ func TestSDDOrchestratorAssetSelection(t *testing.T) {
 		{agent: model.AgentQwenCode, want: "qwen/sdd-orchestrator.md"},
 		{agent: model.AgentClaudeCode, want: "claude/sdd-orchestrator.md"},
 		{agent: model.AgentOpenCode, want: "opencode/sdd-orchestrator.md"},
-		{agent: model.AgentKilocode, want: "opencode/sdd-orchestrator.md"},
+		{agent: model.AgentKilocode, want: "opencode/sdd-orchestrator-kilocode-legacy.md"},
 		{agent: model.AgentVSCodeCopilot, want: "generic/sdd-orchestrator.md"},
 	}
 
