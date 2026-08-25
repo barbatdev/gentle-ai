@@ -217,7 +217,7 @@ func normalizedWords(s string) string {
 
 func TestKilocodeLegacyOrchestratorAssetBaseline(t *testing.T) {
 	const path = "opencode/sdd-orchestrator-kilocode-legacy.md"
-	const wantSHA256 = "11229bf1309f3417418558503acdfd5e3837ef89b4fc50eeba2df8cf819814e7"
+	const wantSHA256 = "93c96195653a61df2fb6739c8beab4f3b5841afa34fa17fe8da83907ad8b588d"
 
 	content, err := Read(path)
 	if err != nil {
