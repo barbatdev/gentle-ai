@@ -87,7 +87,7 @@ Windows executable/archive assets and Scoop publication are temporarily omitted.
 Because there is no signed Windows asset to download, Windows never downloads an
 unsigned executable and never executes a remote update script. Instead:
 
-- With Go 1.25.10+ on `PATH`, the built-in upgrader runs
+- With Go 1.25.12+ on `PATH`, the built-in upgrader runs
   `go install github.com/gentleman-programming/gentle-ai/v2/cmd/gentle-ai@vX.Y.Z`,
   pinned to the exact release tag. This is verified — just against a different
   trust anchor: the module is checked against the Go checksum database

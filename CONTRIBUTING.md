@@ -103,7 +103,7 @@ For disclosure boundaries, required details, attribution rules, and reviewer exp
 
 ### Prerequisites
 
-- Go 1.25.10+
+- Go 1.25.12+
 - Docker (for E2E tests)
 - Git 2.38+
 

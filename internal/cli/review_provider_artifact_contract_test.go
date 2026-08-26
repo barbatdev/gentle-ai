@@ -15,7 +15,7 @@ import (
 func TestReviewProviderArtifactV1ContractsArePinned(t *testing.T) {
 	root := filepath.Join("..", "..", "contracts", "review-integration", "v1")
 	want := map[string]string{
-		"fixtures/capabilities-v1.4.fixture.json": "84e0db457b76b97b35c2be772dfc647f9eab66810ea98f64fed85645c3c266ba",
+		"fixtures/capabilities-v1.4.fixture.json": "fd865e12ed52ecaf47c88d94071b45ba09ef4d8e2a7b0e398db5450c11343094",
 		"fixtures/start.fixture.json":             "3b963b221cd1560eb8872cbabbb5407096f593ced2f13eb9cb06eb61e4cca4d1",
 		// issue #2659: start-v2/status-v2 embed a freshly minted target_identity,
 		// and the purified identity domain legitimately changed that hash for
@@ -54,7 +54,7 @@ func TestReviewProviderArtifactV1ContractsArePinned(t *testing.T) {
 func TestReviewProviderArtifactV20ContractsArePinned(t *testing.T) {
 	root := filepath.Join("..", "..", "contracts", "review-integration", "v2")
 	want := map[string]string{
-		"fixtures/capabilities.fixture.json": "8d5e1a8491db1a5a2f6329e8c1d5cd210dd175e0525ff4d51fa914351d2fcf08",
+		"fixtures/capabilities.fixture.json": "9e33dd2b63fc4018115671e5d7740cc0d4b7a6058d70dc40c409cafe9dd9ca7c",
 		"fixtures/consent.fixture.json":      "203cc96d5c29ba0f27b5c4db04c2e88566e0a923d3a0cdb317f78d9065349075",
 		"fixtures/status.fixture.json":       "846377e06df2cae3587c4258ea75fe1ec1b51f08d01f1d498378c3bf13e93921",
 		"schemas/capabilities.schema.json":   "df1d1d36bfb8b7816d3eb1c44c1350b4a36e27ac321922963add9dd25ed5a1a2",
@@ -76,7 +76,7 @@ func TestReviewProviderArtifactV20ContractsArePinned(t *testing.T) {
 func TestReviewProviderArtifactV21ContractsArePinned(t *testing.T) {
 	root := filepath.Join("..", "..", "contracts", "review-integration", "v2")
 	want := map[string]string{
-		"fixtures/capabilities-v2.1.fixture.json": "96d157898c2bed6d028203999c081fcbb7992fb91a61f27b7eaab80c95245bd6",
+		"fixtures/capabilities-v2.1.fixture.json": "5fc63be5c91acf8f2310814e176dffbfc0eaa6c5f0df0002a0e768574af82977",
 		// issue #2659: consent-v3 embeds a freshly minted target_identity;
 		// the purified identity domain legitimately changed that hash.
 		// Deliberate, not drift.

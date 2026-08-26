@@ -343,7 +343,7 @@ The `cause` naming the real reason is the point. A bare `invalid_request` with a
 
 Windows never auto-updated: it detected a new version and handed you a command to run yourself. With Go on PATH it now upgrades through a pinned `go install`. All the evidence we have is synthetic — this flow is the first real execution.
 
-1. [ ] On Windows with Go 1.25.10+ on PATH, run a command that triggers the update check with an older gentle-ai installed → **Expected**: it upgrades itself. It does **not** print "requires manual update", and it does **not** send you to a releases page.
+1. [ ] On Windows with Go 1.25.12+ on PATH, run a command that triggers the update check with an older gentle-ai installed → **Expected**: it upgrades itself. It does **not** print "requires manual update", and it does **not** send you to a releases page.
 2. [ ] `gentle-ai --version` afterwards → **Expected**: the new version.
 3. [ ] **Report the full output even when it works.** This path has never run outside a test double.
 4. [ ] On Windows **without** Go → **Expected**: it still refuses, and the refusal names the exact `go install github.com/...@vX.Y.Z` command plus the Go version needed. A releases URL as the only guidance is the defect.

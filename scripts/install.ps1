@@ -67,7 +67,7 @@ function Get-Platform {
 function Test-Prerequisites {
     Write-Step "Checking prerequisites"
     if (-not (Get-Command "go" -ErrorAction SilentlyContinue)) {
-        Stop-WithError "$WINDOWS_DISTRIBUTION_HOLD Install Go 1.25.10 or newer, then run: $STABLE_SOURCE_COMMAND"
+        Stop-WithError "$WINDOWS_DISTRIBUTION_HOLD Install Go 1.25.12 or newer, then run: $STABLE_SOURCE_COMMAND"
     }
     Write-Success "Go is available"
 }
@@ -76,7 +76,7 @@ function Get-InstallMethod {
     param([string]$Forced, [string]$Channel)
 
     if ($Forced -eq "binary") {
-        Stop-WithError "$WINDOWS_DISTRIBUTION_HOLD No unsigned binary will be downloaded or executed. Install from source with Go 1.25.10 or newer: $STABLE_SOURCE_COMMAND"
+        Stop-WithError "$WINDOWS_DISTRIBUTION_HOLD No unsigned binary will be downloaded or executed. Install from source with Go 1.25.12 or newer: $STABLE_SOURCE_COMMAND"
     }
     if ($Channel -eq "beta") {
         Write-Info "Using beta channel - installing $BINARY_NAME from main via go install"

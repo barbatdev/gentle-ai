@@ -9,7 +9,7 @@
 <p>
 <a href="https://github.com/Gentleman-Programming/gentle-ai/releases"><img src="https://img.shields.io/github/v/release/Gentleman-Programming/gentle-ai" alt="Release"></a>
 <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="License: MIT"></a>
-<img src="https://img.shields.io/badge/Go-1.25.10+-00ADD8?logo=go&logoColor=white" alt="Go 1.25.10+">
+<img src="https://img.shields.io/badge/Go-1.25.12+-00ADD8?logo=go&logoColor=white" alt="Go 1.25.12+">
 <img src="https://img.shields.io/badge/platform-macOS%20%7C%20Linux%20%7C%20Windows-lightgrey" alt="Platform">
 </p>
 
@@ -106,7 +106,7 @@ go install github.com/gentleman-programming/gentle-ai/v2/cmd/gentle-ai@latest
 ```
 
 > [!WARNING]
-> Windows source builds and CI/runtime tests remain supported, but official Windows binary distribution and Scoop are temporarily unavailable. Windows installation and upgrades require Go 1.25.10+ and fail closed to source-install guidance; they never download an unsigned Gentle AI executable or execute a remote update script.
+> Windows source builds and CI/runtime tests remain supported, but official Windows binary distribution and Scoop are temporarily unavailable. Windows installation and upgrades require Go 1.25.12+ and fail closed to source-install guidance; they never download an unsigned Gentle AI executable or execute a remote update script.
 
 > [!IMPORTANT]
 > After replacing or upgrading the `gentle-ai` binary, run `gentle-ai sync` to refresh its managed assets. See the [sync and upgrade reference](docs/usage.md#sync).
@@ -137,7 +137,7 @@ brew install gentle-ai
 
 To install several tools from this tap, you can instead run `brew trust gentleman-programming/tap`. This broader option trusts all current and future formulas, casks, and external commands published in the tap.
 
-**Go install: stable channel (any platform with Go 1.25.10+)**
+**Go install: stable channel (any platform with Go 1.25.12+)**
 
 ```bash
 go install github.com/gentleman-programming/gentle-ai/v2/cmd/gentle-ai@latest
@@ -156,7 +156,7 @@ gentle-ai install --scope=workspace
 
 Workspace scope applies to selected agents for agent-scoped files such as system prompts, skills, SDD agents, and persona files. Global-only integrations remain global by design.
 
-**Unreleased development channel (`main`)** — use only to test changes that are not part of a release. The managed beta installer tracks `main`; it requires Go 1.25.10+:
+**Unreleased development channel (`main`)** — use only to test changes that are not part of a release. The managed beta installer tracks `main`; it requires Go 1.25.12+:
 
 ```bash
 # macOS / Linux

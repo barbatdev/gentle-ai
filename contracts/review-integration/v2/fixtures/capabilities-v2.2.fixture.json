@@ -4,8 +4,8 @@
   "protocol": {"major": 2, "minor": 2},
   "package": {"name": "gentle-ai", "version": "2.1.7-test", "release_channel": "prerelease"},
   "build": {
-    "id": "sha256:444a9f0608eb22c4697fd2092f3afcfab040c0918343e7e04087730fd33fd5e1",
-    "go_version": "go1.25.10",
+    "id": "sha256:7ec0d7999e36255045c5e6ca92bfdd3dd5f93d6801addbfbb8235d1722c68565",
+    "go_version": "go1.25.12",
     "module_version": "v2.1.7",
     "vcs": "git",
     "vcs_revision": "0123456789abcdef0123456789abcdef01234567",

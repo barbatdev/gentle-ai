@@ -750,7 +750,7 @@ func binaryUpgrade(ctx context.Context, r update.UpdateResult, profile system.Pl
 
 func gentleAIWindowsSourceInstallHint(r update.UpdateResult) string {
 	return update.WindowsDistributionHoldMessage + " " +
-		"No binary or remote script was downloaded or executed. Install/update from source with Go 1.25.10+:\n  " +
+		"No binary or remote script was downloaded or executed. Install/update from source with Go 1.25.12+:\n  " +
 		update.GentleAISourceInstallCommand(r.LatestVersion)
 }
 

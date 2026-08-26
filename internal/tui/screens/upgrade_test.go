@@ -132,7 +132,7 @@ func TestRenderUpgrade_ErrorState(t *testing.T) {
 // containing ": " is split so the command appears on its own line and is not clipped
 // by BubbleTea at the terminal width.
 func TestRenderUpgrade_LongManualHintSplitsAcrossLines(t *testing.T) {
-	longHint := "Windows binary distribution is temporarily unavailable. Install/update from source with Go 1.25.10+:\n  go install github.com/gentleman-programming/gentle-ai/v2/cmd/gentle-ai@v1.1.0"
+	longHint := "Windows binary distribution is temporarily unavailable. Install/update from source with Go 1.25.12+:\n  go install github.com/gentleman-programming/gentle-ai/v2/cmd/gentle-ai@v1.1.0"
 	report := &upgrade.UpgradeReport{
 		Results: []upgrade.ToolUpgradeResult{
 			{
@@ -150,7 +150,7 @@ func TestRenderUpgrade_LongManualHintSplitsAcrossLines(t *testing.T) {
 
 	preambleIndex := -1
 	for i, line := range lines {
-		if strings.Contains(line, "Go 1.25.10+:") {
+		if strings.Contains(line, "Go 1.25.12+:") {
 			preambleIndex = i
 			break
 		}

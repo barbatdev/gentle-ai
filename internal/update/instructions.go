@@ -68,7 +68,7 @@ func gentleAIHint(profile system.PlatformProfile) string {
 	case "darwin":
 		return "gentle-ai upgrade (downloads pre-built binary)"
 	case "windows":
-		return WindowsDistributionHoldMessage + " Install/update from source with Go 1.25.10+: " + GentleAISourceInstallCommand("")
+		return WindowsDistributionHoldMessage + " Install/update from source with Go 1.25.12+: " + GentleAISourceInstallCommand("")
 	default:
 		return ""
 	}

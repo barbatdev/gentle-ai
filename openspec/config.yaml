@@ -2,15 +2,15 @@
 schema: spec-driven
 
 context: |
-  Tech stack: Go 1.25.10, Bubbletea TUI (charmbracelet/bubbletea v1.3.10), lipgloss v1.1.0
-  Architecture: cmd/ entrypoints, internal/ packages (agents, tui, model, pipeline, catalog, system, planner, verify, update, opencode, installcmd, cli, app, components, state, backup, assets, agentbuilder)
-  Feature branch: feat/claude-contextual-skill-loading — contextual skill loading from Claude Code
+  Tech stack: Go 1.25.12, Bubbletea TUI (charmbracelet/bubbletea v1.3.10), lipgloss v1.1.0
+  Architecture: cmd/ entrypoints and internal/ packages (agents, tui, model, pipeline, catalog, system, planner, verify, update, opencode, installcmd, cli, app, components, state, backup, assets, agentbuilder)
+  Workspace: root Go module plus an independent bench/ Go module for black-box journey measurement; root Go commands do not include bench/.
   Agents: multi-agent support (claude, opencode, cursor, codex, gemini, vscode, windsurf, antigravity)
   Skills catalog: internal/catalog/skills.go — known skill registry; project skills in skills/
   Build: goreleaser (.goreleaser.yaml), CI: GitHub Actions (ci.yml, pr-check.yml, release.yml)
   Style: gofmt (standard), go vet, no golangci-lint config found
 
-strict_tdd: true
+strict_tdd: false
 
 rules:
   proposal:
@@ -33,25 +33,36 @@ rules:
     - Load go-testing skill when writing tests
     - Follow existing code patterns in internal/ packages
   verify:
-    - Run: go test ./...
-    - Run: go vet ./...
+    - Run root module tests: go test ./... (from the workspace root)
+    - Run benchmark module tests: go test ./... (from bench/)
+    - Run relevant module static analysis: go vet ./... (from the applicable module root)
     - Compare implementation against every spec scenario
   archive:
     - Warn before merging destructive deltas (large removals)
 
 testing:
-  strict_tdd: true
-  detected: "2026-05-05"
+  strict_tdd: false
+  detected: "2026-08-24"
+  workspace_test_command: null
+  strict_tdd_reason: "No explicit workspace-level test command covers both independent Go modules."
 
-  runner:
-    command: "go test ./..."
-    framework: "Go standard testing"
+  projects:
+    - path: "."
+      stack: "Go 1.25.12; Bubbletea 1.3.10; Lipgloss 1.1.0"
+      test_command: "go test ./..."
+      test_working_directory: "."
+      framework: "Go standard testing"
+    - path: "bench/"
+      stack: "Go 1.25.12"
+      test_command: "go test ./..."
+      test_working_directory: "bench/"
+      framework: "Go standard testing"
 
   layers:
     unit:
       available: true
       tool: "go test"
-      note: "132 test files across internal/ packages"
+      note: "Available in both independent Go modules; invoke each module from its own root."
     integration:
       available: true
       tool: "net/http/httptest (built-in)"
@@ -66,7 +77,7 @@ testing:
 
   coverage:
     available: true
-    command: "go test -cover ./..."
+    command: "go test -cover ./... (from each applicable module root)"
 
   quality:
     linter:
@@ -74,7 +85,7 @@ testing:
       note: "No golangci-lint config found; go vet is available"
     type_checker:
       available: true
-      command: "go vet ./..."
+      command: "go vet ./... (from each applicable module root)"
     formatter:
       available: true
       command: "gofmt"

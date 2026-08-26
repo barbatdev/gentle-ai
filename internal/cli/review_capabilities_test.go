@@ -549,7 +549,7 @@ func stubReviewCapabilityIdentity(t *testing.T, executable string) func() {
 	reviewCapabilitiesExecutablePath = func() (string, error) { return executable, nil }
 	reviewCapabilitiesBuildInfoReader = func() (*debug.BuildInfo, bool) {
 		return &debug.BuildInfo{
-			GoVersion: "go1.25.10",
+			GoVersion: "go1.25.12",
 			Main:      debug.Module{Path: "github.com/gentleman-programming/gentle-ai/v2", Version: "v2.1.7"},
 			Settings: []debug.BuildSetting{
 				{Key: "vcs", Value: "git"},
