@@ -75,6 +75,7 @@
 ./internal/sddstatus TestRuntimeLedgerCASAllowsOnlyOneConcurrentBudgetReset race      # sibling first-use CAS surface of the same store
 ./internal/sddstatus TestRuntimeLedgerLockContentionPreservesTheNonMutationProof race # 21d93207: loser of the lock reports typed contention, proves non-mutation
 ./internal/sddstatus TestRuntimeLedgerMutationContentionIsNotDoubleWrapped race       # the reclassification boundary must not widen
+./internal/sddstatus TestNativeAttemptProfile                                        # os.Root symlink and retained-handle preflight
 
 # --- #1872: RAR plan-authority lock convoy (fixed by 6457a4a8) ----------------
 # Reproduced ONLY on Darwin: the critical section costs hundreds of ms there

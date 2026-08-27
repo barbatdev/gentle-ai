@@ -7,6 +7,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"os"
 	"strings"
 
 	"github.com/gentleman-programming/gentle-ai/v2/internal/reviewtransaction"
@@ -56,6 +57,7 @@ func runSDDAttempt(ctx context.Context, args []string, stdout io.Writer) error {
 	remediatesEvidenceRevision := registerSDDAttemptStringFlag(flags, operation, "remediates-evidence-revision")
 	reason := registerSDDAttemptStringFlag(flags, operation, "reason")
 	actor := registerSDDAttemptStringFlag(flags, operation, "actor")
+	profilePath := registerSDDAttemptStringFlag(flags, operation, "profile")
 	var roots sddAttemptRootList
 	registerSDDAttemptRootFlag(flags, operation, &roots)
 	var intendedUntracked reviewRepeatedPathFlag
@@ -94,6 +96,28 @@ func runSDDAttempt(ctx context.Context, args []string, stdout io.Writer) error {
 	store, err := sddstatus.OpenRuntimeStore(ctx, *cwd, *change)
 	if err != nil {
 		return fmt.Errorf("open native SDD runtime authority: %w", err)
+	}
+	var profile *sddstatus.NativeAttemptProfile
+	if operation == "acquire" && presentSDDAttemptFlags(args[1:], "profile") != 0 {
+		if *profilePath == "" {
+			return errors.New("profile_invalid; rerun `gentle-ai sdd-attempt acquire` with a valid contained profile")
+		}
+		root, rootErr := os.OpenRoot(store.Workspace)
+		if rootErr != nil {
+			return errors.New("profile_invalid; rerun `gentle-ai sdd-attempt acquire` with a valid contained profile")
+		}
+		defer root.Close()
+		profile, err = sddstatus.OpenNativeAttemptProfile(root, *profilePath)
+		if err != nil {
+			return errors.New("profile_invalid; rerun `gentle-ai sdd-attempt acquire` with a valid contained profile")
+		}
+		defer profile.Close()
+		if profile.Root != store.Workspace || profile.CWD != store.Workspace {
+			return errors.New("profile_workspace_mismatch; rerun `gentle-ai sdd-attempt acquire` with a profile whose root and cwd equal --cwd")
+		}
+		if profile.MigrationGlob != "src/migrations/*.migration.{js,ts}" {
+			return errors.New("profile_migration_glob_rejected; rerun `gentle-ai sdd-attempt acquire` with migrationGlob src/migrations/*.migration.{js,ts}")
+		}
 	}
 	var intended []string
 	declaredUntracked := reviewIntendedUntrackedDeclared(untrackedScope, intendedUntracked, expectedUntrackedInventory)
@@ -163,6 +187,9 @@ func runSDDAttempt(ctx context.Context, args []string, stdout io.Writer) error {
 			ExpectedRevision: *expected, RequestID: *requestID, Reason: *reason, Actor: *actor,
 		})
 	case "acquire":
+		if profile != nil && profile.Revalidate() != nil {
+			return errors.New("profile_invalid; rerun `gentle-ai sdd-attempt acquire` with a valid contained profile")
+		}
 		result, err = store.Acquire(ctx, sddstatus.CompactAcquireRequest{
 			BeginAttemptRequest: sddstatus.BeginAttemptRequest{
 				RequestID: *requestID, WorkUnit: *workUnit, EvidenceGoal: *evidenceGoal,
@@ -316,6 +343,7 @@ var sddAttemptOperationDefinitions = []sddAttemptOperationContract{
 		{name: "untracked-scope", usage: "required when eligible untracked files exist; select or exclude"},
 		{name: "expected-untracked-inventory", usage: "required with untracked-scope; inventory digest"},
 		{name: "intended-untracked", kind: sddAttemptRepeatableStringFlag, usage: "repeatable selected repo-relative untracked path"},
+		{name: "profile", usage: "optional; contained native attempt profile file"},
 	}},
 	{name: "settle", purpose: "Complete the attempt selected by its token", flags: []sddAttemptFlagDefinition{
 		sddAttemptCWDFlag, sddAttemptChangeFlag,
@@ -489,6 +517,9 @@ func validateSDDAttemptOperationFlags(operation string, args []string) error {
 		}
 		if !allowed[name] {
 			return fmt.Errorf("flag provided but not defined: -%s", name)
+		}
+		if name == "profile" && !hasInlineValue && (index+1 == len(args) || strings.HasPrefix(args[index+1], "-")) {
+			return errors.New("profile_invalid; rerun `gentle-ai sdd-attempt acquire --profile <file>` with a profile value")
 		}
 		if !hasInlineValue && index+1 < len(args) {
 			index++

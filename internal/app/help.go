@@ -22,7 +22,7 @@ COMMANDS
                Print native SDD phase status for orchestrators
   sdd-continue [change]
                Print native SDD dispatcher routing output
-  sdd-attempt <acquire|settle> --cwd <repo> --change <change>
+  sdd-attempt <acquire [--profile <file>]|settle> --cwd <repo> --change <change>
                Run bounded normal orchestration without exposing runtime history
   sdd-verify-validate --input <path|-> --requirements <n> --scenarios <n>
                Validate exact verification-report bytes without persistence

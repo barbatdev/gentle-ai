@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -115,7 +116,8 @@ func TestRunSDDAttemptRejectsMissingOrAmbiguousInputs(t *testing.T) {
 		{name: "unknown operation", args: []string{"begn"}, want: `unknown sdd-attempt operation "begn"; want one of status, begin, finish, handoff, reset, rescope, repair, acquire, settle, or grant`},
 		{name: "missing change", args: []string{"status", "--cwd", repo}, want: "--change"},
 		{name: "unknown flag", args: []string{"status", "--cwd", repo, "--change", "thin", "--mystery"}, want: "flag provided but not defined"},
-		{name: "irrelevant flag", args: []string{"status", "--cwd", repo, "--change", "thin", "--outcome", "failed"}, want: "flag provided but not defined"},
+		{name: "profile outside acquire", args: []string{"status", "--cwd", repo, "--change", "thin", "--profile", "profile.json"}, want: "flag provided but not defined"},
+		{name: "missing profile value", args: []string{"acquire", "--cwd", repo, "--change", "thin", "--profile"}, want: "profile_invalid"},
 		{name: "missing begin CAS", args: []string{"begin", "--cwd", repo, "--change", "thin", "--request-id", "begin", "--work-unit", "unit", "--evidence-goal", "goal"}, want: "--expected-revision"},
 		{name: "missing rescope scope", args: []string{"rescope", "--cwd", repo, "--change", "thin", "--expected-revision", cliAttemptHash('e'), "--request-id", "rescope", "--reason", "narrowing", "--actor", "maintainer"}, want: "--work-unit"},
 		{name: "missing finish evidence", args: []string{"finish", "--cwd", repo, "--change", "thin", "--expected-revision", cliAttemptHash('b'), "--request-id", "finish", "--outcome", "failed", "--diagnosis", "diagnosis", "--harness-disposition", "reused", "--cleanup-evidence", "cleanup", "--process-evidence", "process"}, want: "--evidence-revision"},
@@ -136,6 +138,54 @@ func TestRunSDDAttemptRejectsMissingOrAmbiguousInputs(t *testing.T) {
 				t.Fatalf("RunSDDAttempt(%v) = output %q, err %v, want %q", tt.args, output.String(), err, tt.want)
 			}
 		})
+	}
+}
+
+func TestSDDAttemptProfile(t *testing.T) {
+	repo := initReviewCLIRepo(t)
+	profile := filepath.Join(repo, "profile.json")
+	writeProfile := func(root, cwd, glob string) {
+		writeCLIAttemptFile(t, profile, fmt.Sprintf(`{"schema":"gentle-ai.native-attempt-profile/v1","root":%q,"cwd":%q,"dataSource":"src/data-source.ts","migrationGlob":%q}`, root, cwd, glob))
+	}
+	args := func(request string) []string {
+		return []string{"acquire", "--cwd", repo, "--change", "profile", "--request-id", request, "--work-unit", "profile", "--evidence-goal", "profile", "--profile", "profile.json"}
+	}
+	for _, tt := range []struct{ name, root, cwd, glob, want string }{
+		{"invalid", repo, repo, "src/migrations/*.migration.{js,ts}", "profile_invalid"},
+		{"root mismatch", t.TempDir(), repo, "src/migrations/*.migration.{js,ts}", "profile_workspace_mismatch"},
+		{"cwd mismatch", repo, t.TempDir(), "src/migrations/*.migration.{js,ts}", "profile_workspace_mismatch"},
+		{"glob mismatch", repo, repo, "src/migrations/*", "profile_migration_glob_rejected"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			if tt.name == "invalid" {
+				writeCLIAttemptFile(t, profile, "{")
+			} else {
+				writeProfile(tt.root, tt.cwd, tt.glob)
+			}
+			store, err := sddstatus.OpenRuntimeStore(context.Background(), repo, "profile")
+			if err != nil {
+				t.Fatal(err)
+			}
+			before := snapshotRuntimeAuthorityFiles(t, store.Dir)
+			var output bytes.Buffer
+			err = RunSDDAttempt(args(tt.name), &output)
+			if err == nil || !strings.Contains(err.Error(), tt.want) || output.Len() != 0 {
+				t.Fatalf("RunSDDAttempt = %q, %v", output.String(), err)
+			}
+			if after := snapshotRuntimeAuthorityFiles(t, store.Dir); !reflect.DeepEqual(before, after) {
+				t.Fatal("profile refusal mutated runtime authority")
+			}
+		})
+	}
+	writeProfile(repo, repo, "src/migrations/*.migration.{js,ts}")
+	runReviewCLIGit(t, repo, "add", "profile.json")
+	first, _ := runCompactSDDAttempt(t, args("profile-success"))
+	if first.State != "proceed" || first.Token == "" {
+		t.Fatalf("profile acquire = %#v", first)
+	}
+	continued := append(args("profile-token"), "--token", first.Token)
+	if got, _ := runCompactSDDAttempt(t, continued); got.State != "proceed" || got.Token != first.Token {
+		t.Fatalf("profile token = %#v", got)
 	}
 }
 
@@ -275,7 +325,7 @@ func TestRunSDDAttemptHelpContractsCoverEveryOperation(t *testing.T) {
 		{"handoff", []string{"cwd", "change", "expected-revision", "request-id", "destination-worktree"}, []string{"registered linked worktree", "Git common directory"}},
 		{"reset", []string{"cwd", "change", "expected-revision", "request-id", "reason", "actor"}, []string{"500 bytes", "128 bytes"}},
 		{"rescope", []string{"cwd", "change", "expected-revision", "request-id", "work-unit", "evidence-goal", "max-attempts", "max-changed-lines", "reason", "actor"}, []string{"explicit limit", "cannot exceed current objective"}},
-		{"acquire", []string{"cwd", "change", "token", "request-id", "work-unit", "evidence-goal", "max-attempts", "max-changed-lines", "remediates-evidence-revision", "untracked-scope", "expected-untracked-inventory", "intended-untracked"}, []string{"default 2", "default 200", "failed evidence correction"}},
+		{"acquire", []string{"cwd", "change", "token", "request-id", "work-unit", "evidence-goal", "max-attempts", "max-changed-lines", "remediates-evidence-revision", "untracked-scope", "expected-untracked-inventory", "intended-untracked", "profile"}, []string{"default 2", "default 200", "failed evidence correction"}},
 		{"repair", []string{"cwd", "change", "expected-revision", "request-id", "reason", "actor"}, []string{"unreadable sha256", "500 bytes", "128 bytes"}},
 		{"settle", []string{"cwd", "change", "token", "request-id", "outcome", "evidence-revision", "diagnosis", "harness-disposition", "cleanup-evidence", "process-evidence", "remediates-evidence-revision"}, []string{"opaque token returned by acquire", "required for failed/passed; omit for interrupted"}},
 		{"grant", []string{"cwd", "change", "expected-revision", "root", "change-instance", "request-id", "actor", "reason"}, []string{"repeatable", "1..32", "4096 bytes"}},

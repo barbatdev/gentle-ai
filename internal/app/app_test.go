@@ -350,19 +350,19 @@ func TestRunArgsSDDAttemptIsDispatchedBeforePlatformValidation(t *testing.T) {
 	}
 }
 
-func TestRunArgsSDDAttemptHelpBypassesPlatformAndRepositoryValidation(t *testing.T) {
+func TestRunArgsSDDAttemptProfileHelpBypassesPlatformAndRepositoryValidation(t *testing.T) {
 	origEnsure := ensureCurrentOSSupported
 	t.Cleanup(func() { ensureCurrentOSSupported = origEnsure })
 	ensureCurrentOSSupported = func() error { return fmt.Errorf("platform validation should not run for sdd-attempt help") }
 
 	var output bytes.Buffer
-	err := RunArgs([]string{"sdd-attempt", "grant", "--cwd", filepath.Join(t.TempDir(), "missing"), "--change", "missing", "--help"}, &output)
+	err := RunArgs([]string{"sdd-attempt", "acquire", "--profile", "profile.json", "--cwd", filepath.Join(t.TempDir(), "missing"), "--change", "missing", "--help"}, &output)
 	if err != nil {
-		t.Fatalf("RunArgs(sdd-attempt grant --help): %v", err)
+		t.Fatalf("RunArgs(sdd-attempt acquire --help): %v", err)
 	}
-	for _, want := range []string{"Usage: gentle-ai sdd-attempt grant [flags]", "--root <path>...", "repeatable"} {
+	for _, want := range []string{"Usage: gentle-ai sdd-attempt acquire [flags]", "--profile <value>", "contained native attempt profile"} {
 		if !strings.Contains(output.String(), want) {
-			t.Fatalf("sdd-attempt grant help missing %q:\n%s", want, output.String())
+			t.Fatalf("sdd-attempt acquire help missing %q:\n%s", want, output.String())
 		}
 	}
 }
