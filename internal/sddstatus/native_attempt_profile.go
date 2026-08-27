@@ -29,7 +29,7 @@ type NativeAttemptProfile struct {
 
 // OpenNativeAttemptProfile opens and validates a profile through the supplied root.
 func OpenNativeAttemptProfile(root *os.Root, name string) (*NativeAttemptProfile, error) {
-	if root == nil || name == "" || filepath.IsAbs(name) || filepath.Clean(name) != name || strings.HasSuffix(name, "/") || strings.HasSuffix(name, `\`) {
+	if root == nil || name == "" || filepath.IsAbs(name) || filepath.Clean(name) != filepath.FromSlash(name) || strings.HasSuffix(name, "/") || strings.HasSuffix(name, `\`) {
 		return nil, errNativeAttemptProfile
 	}
 	file, err := root.Open(name)
