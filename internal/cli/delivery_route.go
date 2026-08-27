@@ -20,13 +20,13 @@ func RunDeliveryRoute(args []string, stdout io.Writer) error {
 		case "--cwd":
 			index++
 			if index == len(args) || strings.HasPrefix(args[index], "-") {
-				return fmt.Errorf("--cwd requires a value")
+				return fmt.Errorf("--cwd requires a value; usage: gentle-ai delivery-route --cwd <repo> --json")
 			}
 			cwd = args[index]
 		case "--json":
 			jsonOutput = true
 		default:
-			return fmt.Errorf("unknown delivery-route argument %q", args[index])
+			return fmt.Errorf("unknown delivery-route argument %q; usage: gentle-ai delivery-route --cwd <repo> --json", args[index])
 		}
 	}
 	if cwd == "" || !jsonOutput {

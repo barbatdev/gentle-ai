@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/gentleman-programming/gentle-ai/v2/internal/deliveryroute"
@@ -38,5 +39,26 @@ func TestRunDeliveryRouteRequiresJSONAndCWD(t *testing.T) {
 	}
 	if err := RunDeliveryRoute([]string{"--cwd", t.TempDir()}, &bytes.Buffer{}); err == nil {
 		t.Fatal("missing json accepted")
+	}
+}
+
+func TestRunDeliveryRouteInvalidArgumentsNameUsageContinuation(t *testing.T) {
+	const usage = "gentle-ai delivery-route --cwd <repo> --json"
+	for _, testCase := range []struct {
+		name string
+		args []string
+	}{
+		{name: "missing cwd value", args: []string{"--cwd", "--json"}},
+		{name: "unknown argument", args: []string{"--unknown"}},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			err := RunDeliveryRoute(testCase.args, &bytes.Buffer{})
+			if err == nil {
+				t.Fatal("RunDeliveryRoute() error = nil")
+			}
+			if !strings.Contains(err.Error(), usage) {
+				t.Fatalf("RunDeliveryRoute() error = %q, want actionable usage %q", err, usage)
+			}
+		})
 	}
 }
