@@ -117,7 +117,7 @@ func renderBoundedReviewAssetBodyFromContent(agent model.AgentID, path, content 
 		content = strings.ReplaceAll(content, authorityFirstProcedurePlaceholder, authorityFirstTerminalProcedure())
 	}
 	content = strings.ReplaceAll(content, researchLifecyclePlaceholder, researchLifecycleContract())
-	if strings.HasSuffix(path, "/sdd-orchestrator.md") {
+	if strings.HasSuffix(path, "/sdd-orchestrator.md") || path == "opencode/sdd-orchestrator-kilocode-legacy.md" {
 		if rendersReviewLifecycle(agent) {
 			return replaceBoundedReviewSection(content, "#### Review Execution Contract", "Cost and Context Balance", boundedReviewContractFor(agent))
 		}
