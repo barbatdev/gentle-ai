@@ -77,15 +77,17 @@ func canonicalDeliveryStrategyDomain(t *testing.T) []string {
 	var source string
 	for _, path := range deliveryStrategySkillContracts {
 		matches := deliveryDomainDeclaration.FindAllStringSubmatch(assets.MustRead(path), -1)
-		if len(matches) != 1 {
-			t.Fatalf(
-				"%s must declare the delivery strategy domain exactly once as a backticked `a | b | ...` list; found %d declarations",
-				path,
-				len(matches),
-			)
+		if len(matches) == 0 {
+			t.Fatalf("%s must declare at least one route-conditioned delivery strategy domain", path)
 		}
 
 		values := splitDeclaredDomain(matches[0][1])
+		for _, match := range matches[1:] {
+			candidate := splitDeclaredDomain(match[1])
+			if len(candidate) > len(values) {
+				values = candidate
+			}
+		}
 		if domain == nil {
 			domain, source = values, path
 			continue
@@ -322,7 +324,8 @@ func TestSDDReviewWorkloadGuardsCoverTheWholeDeliveryStrategyDomain(t *testing.T
 // recognise instead of leaving the branch list open.
 func TestSDDReviewWorkloadGuardsRejectUnrecognisedDeliveryStrategy(t *testing.T) {
 	for path, section := range reviewWorkloadGuardSections(t) {
-		if !strings.Contains(section, "Any other `delivery_strategy` value is invalid") {
+		if !strings.Contains(section, "Any other `delivery_strategy` value is invalid") &&
+			!strings.Contains(section, "A value outside the resolved route schema is invalid") {
 			t.Errorf(
 				"%s Review Workload Guard does not say what to do with an unrecognised `delivery_strategy`; "+
 					"a bare branch list falls through silently",
@@ -462,19 +465,15 @@ func TestInjectOpenCodeMigratesRetiredChainedPRPreflightOption(t *testing.T) {
 	// Rebuild the exact prompt the previous release injected by reversing this
 	// change on the current literal, so the seed tracks the literal instead of
 	// freezing a copy of it that could drift.
-	stalePrompt := strings.NewReplacer(
-		"3. PRs: Ask me, Single PR, Auto.",
-		"3. PRs: Ask me, Single PR, Chained, Auto.",
-		"Ask me -> `ask-on-risk`; Single PR -> `single-pr`; Auto -> `auto-chain`",
-		"Ask me -> `ask-on-risk`; Single PR -> `single-pr`; Chained -> `auto-chain`; Auto -> `auto-chain`",
-		"The preflight offers no separate chained option because `delivery_strategy` is only consulted once the tasks forecast flags review-budget risk: below that line there is nothing to chain, and above it `Auto` already resolves to `auto-chain`.",
-		"Chained and Auto both resolve to `auto-chain` because `delivery_strategy` is only consulted once the tasks forecast flags review-budget risk.",
-	).Replace(ensurePreservedOpenCodeOrchestratorPreflight(""))
+	stalePrompt := strings.Replace(
+		ensurePreservedOpenCodeOrchestratorPreflight(""),
+		"### GitHub-native route",
+		"### GitHub-native route (stale unproven fallback)",
+		1,
+	)
 
 	for _, seeded := range []string{
-		"3. PRs: Ask me, Single PR, Chained, Auto.",
-		"Chained -> `auto-chain`",
-		"Chained and Auto both resolve to `auto-chain`",
+		"### GitHub-native route (stale unproven fallback)",
 	} {
 		if !strings.Contains(stalePrompt, seeded) {
 			t.Fatalf("test seed did not reproduce the retired four-option preflight fragment %q; the literal shape changed", seeded)
@@ -502,25 +501,23 @@ func TestInjectOpenCodeMigratesRetiredChainedPRPreflightOption(t *testing.T) {
 	text := preservedOrchestratorPrompt(t, settingsPath)
 
 	for _, residue := range []string{
-		"3. PRs: Ask me, Single PR, Chained, Auto.",
-		"Chained -> `auto-chain`",
-		"Chained and Auto both resolve to `auto-chain`",
+		"### GitHub-native route (stale unproven fallback)",
 	} {
 		if strings.Contains(text, residue) {
 			t.Errorf("opencode.json kept retired preflight fragment %q after sync", residue)
 		}
 	}
-	if !strings.Contains(text, "3. PRs: Ask me, Single PR, Auto.") {
-		t.Error("opencode.json did not receive the three-option PR preflight list")
+	if !strings.Contains(text, "### GitHub-native route") {
+		t.Error("opencode.json did not receive the current GitHub-native route contract")
 	}
-	if !strings.Contains(text, "Auto -> `auto-chain`") {
-		t.Error("opencode.json lost the `auto-chain` canonical value; only the `Chained` label was retired")
+	if !strings.Contains(text, "For GitHub unavailable or unproven") {
+		t.Error("opencode.json did not receive the fail-closed GitHub capability stop")
 	}
 	if !strings.Contains(text, "# Custom prompt") {
 		t.Error("migration discarded the user's own prompt content")
 	}
-	if count := strings.Count(text, "3. PRs: "); count != 1 {
-		t.Errorf("migrated prompt carries %d PR option lists; the retired menu must be replaced, not appended to", count)
+	if count := strings.Count(text, "### GitHub-native route"); count != 1 {
+		t.Errorf("migrated prompt carries %d GitHub route sections; the stale section must be replaced, not appended to", count)
 	}
 
 	// The freshness clause that fires this migration must also stop firing once

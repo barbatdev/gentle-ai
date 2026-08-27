@@ -1514,7 +1514,42 @@ func replacePreservedPromptSection(prompt string, start, end int, replacement st
 	return b.String()
 }
 
+func providerAwareOpenCodePreflight(prompt string) string {
+	const (
+		startMarker  = "<!-- gentle-ai:sdd-session-preflight-migration -->"
+		endMarker    = "<!-- /gentle-ai:sdd-session-preflight-migration -->"
+		startHeading = "### SDD Session Preflight (HARD GATE)"
+		endHeading   = "### SDD Entry Routing (MANDATORY)"
+	)
+
+	source := renderSDDOrchestratorAsset(model.AgentOpenCode)
+	start := strings.Index(source, startHeading)
+	end := strings.Index(source, endHeading)
+	if start < 0 || end <= start {
+		return prompt
+	}
+	canonical := strings.TrimSpace(source[start:end])
+	block := startMarker + "\n" + canonical + "\n" + endMarker
+
+	if markerStart := strings.Index(prompt, startMarker); markerStart >= 0 {
+		if relativeEnd := strings.Index(prompt[markerStart:], endMarker); relativeEnd >= 0 {
+			markerEnd := markerStart + relativeEnd + len(endMarker)
+			return replacePreservedPromptSection(prompt, markerStart, markerEnd, block)
+		}
+	}
+	if headingStart := strings.Index(prompt, startHeading); headingStart >= 0 {
+		remainder := prompt[headingStart+len(startHeading):]
+		if relativeEnd := strings.Index(remainder, endHeading); relativeEnd >= 0 {
+			headingEnd := headingStart + len(startHeading) + relativeEnd
+			return replacePreservedPromptSection(prompt, headingStart, headingEnd, block)
+		}
+	}
+	return strings.TrimRight(prompt, "\n") + "\n\n" + block + "\n"
+}
+
 func ensurePreservedOpenCodeOrchestratorPreflight(prompt string) string {
+	return providerAwareOpenCodePreflight(prompt)
+
 	preflight := `
 
 <!-- gentle-ai:sdd-session-preflight-migration -->

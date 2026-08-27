@@ -5050,7 +5050,7 @@ func TestSDDOrchestratorAssetSelection(t *testing.T) {
 		{agent: model.AgentQwenCode, want: "qwen/sdd-orchestrator.md"},
 		{agent: model.AgentClaudeCode, want: "claude/sdd-orchestrator.md"},
 		{agent: model.AgentOpenCode, want: "opencode/sdd-orchestrator.md"},
-		{agent: model.AgentKilocode, want: "opencode/sdd-orchestrator.md"},
+		{agent: model.AgentKilocode, want: "opencode/sdd-orchestrator-kilocode-legacy.md"},
 		{agent: model.AgentVSCodeCopilot, want: "generic/sdd-orchestrator.md"},
 	}
 
