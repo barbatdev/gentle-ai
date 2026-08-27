@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"errors"
+	"github.com/gentleman-programming/gentle-ai/v2/internal/pathidentity"
 	"io"
 	"os"
 	"path/filepath"
@@ -100,7 +101,7 @@ func decodeNativeAttemptProfile(payload []byte) (NativeAttemptProfile, error) {
 
 func nativeAttemptProfileCanonicalPath(path string) bool {
 	resolved, err := filepath.EvalSymlinks(path)
-	return err == nil && filepath.IsAbs(path) && filepath.Clean(path) == path && resolved == path
+	return err == nil && filepath.IsAbs(path) && filepath.Clean(path) == path && pathidentity.SameDirectory(path, resolved)
 }
 
 // Revalidate rejects in-place changes while retaining the accepted file handle.
