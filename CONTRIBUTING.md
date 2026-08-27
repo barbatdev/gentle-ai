@@ -28,7 +28,7 @@ Before you dive in, please read this guide fully. We have a structured workflow 
 This project follows a strict issue-first workflow:
 
 1. **Open an issue** using the appropriate template ([Bug Report](https://github.com/Gentleman-Programming/gentle-ai/issues/new?template=bug_report.yml) or [Feature Request](https://github.com/Gentleman-Programming/gentle-ai/issues/new?template=feature_request.yml))
-2. **Wait for approval** — work may begin only when the issue has `status:approved` under the canonical issue-creation workflow contract. Without a current direct instruction and target-host capability granting the exact action, comment and wait.
+2. **Wait for approval** — a maintainer will add the `status:approved` label when the issue is ready to be worked on
 3. **Comment on the issue** to let others know you're working on it
 4. **Open a PR** referencing the approved issue
 
@@ -345,7 +345,7 @@ Review feedback should be warm, direct, and useful quickly. Start with the actio
 
 ### Before Opening a PR
 
-- [ ] There is a linked approved issue (`Closes #<N>`)
+- [ ] Every visible issue reference is a well-formed base-repository `Closes/Fixes/Resolves #<N>` or non-closing `Refs #<N>`, and each linked issue is approved
 - [ ] The PR is at or below 400 changed lines, or a maintainer approved `size:exception`
 - [ ] Commits are organized by deliverable work unit
 - [ ] All unit tests pass (`go test ./...`)
@@ -371,8 +371,8 @@ All PRs go through automated checks:
 | Check | What It Verifies |
 |-------|-----------------|
 | **Check PR Cognitive Load** | PR stays within 400 changed lines (`additions + deletions`) unless labelled `size:exception` |
-| **Check Issue Reference** | PR body contains `Closes/Fixes/Resolves #N` |
-| **Check Issue Has status:approved** | The linked issue has `status:approved` under the canonical issue-creation workflow contract |
+| **Check Issue Reference** | PR body contains a visible, well-formed base-repository `Closes/Fixes/Resolves #N` or non-closing `Refs #N`; malformed, cross-repository, and mixed closing/non-closing references for the same issue fail |
+| **Check Issue Has status:approved** | The linked issue has been approved by a maintainer |
 | **Check PR Has type:* Label** | Exactly one `type:*` label is applied |
 | **Unit Tests** | `go test ./...` passes |
 | **E2E Tests** | `cd e2e && ./docker-test.sh` passes |
@@ -387,7 +387,10 @@ In the PR body, include one of:
 Closes #42
 Fixes #42
 Resolves #42
+Refs #42
 ```
+
+`Closes`/`Fixes`/`Resolves` close the issue on merge; use `Refs #N` for a non-closing approved-issue link. References inside HTML comments, malformed references, cross-repository references, and using both closing and non-closing forms for the same issue fail CI.
 
 ---
 
