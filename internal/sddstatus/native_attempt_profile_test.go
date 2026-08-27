@@ -9,7 +9,7 @@ import (
 )
 
 func TestNativeAttemptProfile(t *testing.T) {
-	tests := []struct {
+	for _, tt := range []struct {
 		name    string
 		path    string
 		payload func(string) string
@@ -26,7 +26,7 @@ func TestNativeAttemptProfile(t *testing.T) {
 		}, nil, nil, true},
 		{"unsupported schema", "profile.json", func(root string) string { return strings.Replace(nativeAttemptProfileJSON(root), "/v1\"", "/v2\"", 1) }, nil, nil, true},
 		{"mistyped member", "profile.json", func(root string) string {
-			return strings.Replace(nativeAttemptProfileJSON(root), `"root":"`+root+`"`, `"root":1`, 1)
+			return strings.Replace(nativeAttemptProfileJSON(root), `"root":`+fmt.Sprintf("%q", root), `"root":1`, 1)
 		}, nil, nil, true},
 		{"trailing input", "profile.json", func(root string) string { return nativeAttemptProfileJSON(root) + "{}" }, nil, nil, true},
 		{"bounded", "profile.json", func(root string) string {
@@ -75,8 +75,7 @@ func TestNativeAttemptProfile(t *testing.T) {
 				t.Fatal(err)
 			}
 		}, true},
-	}
-	for _, tt := range tests {
+	} {
 		t.Run(tt.name, func(t *testing.T) {
 			root := t.TempDir()
 			if tt.path != "" && tt.name != "non regular leaf" {
@@ -124,23 +123,24 @@ func TestNativeAttemptProfileRetainsAcceptedHandle(t *testing.T) {
 			writeNativeAttemptProfile(t, path, "{}")
 		}},
 		{"ancestor", func(t *testing.T, path string) {
-			dir := filepath.Dir(path)
-			if err := os.Rename(dir, dir+".old"); err != nil {
+			if err := os.Rename(filepath.Dir(path), filepath.Dir(path)+".old"); err != nil {
 				t.Fatal(err)
 			}
-			if err := os.Mkdir(dir, 0o755); err != nil {
+			if err := os.Mkdir(filepath.Dir(path), 0o755); err != nil {
 				t.Fatal(err)
 			}
 			writeNativeAttemptProfile(t, path, "{}")
 		}},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
-			root := t.TempDir()
-			dir := filepath.Join(root, "profiles")
-			if err := os.Mkdir(dir, 0o755); err != nil {
+			root, err := filepath.EvalSymlinks(t.TempDir())
+			if err != nil {
 				t.Fatal(err)
 			}
-			path := filepath.Join(dir, "profile.json")
+			path := filepath.Join(root, "profiles", "profile.json")
+			if err := os.Mkdir(filepath.Dir(path), 0o755); err != nil {
+				t.Fatal(err)
+			}
 			writeNativeAttemptProfile(t, path, nativeAttemptProfileJSON(root))
 			handle, err := os.OpenRoot(root)
 			if err != nil {
