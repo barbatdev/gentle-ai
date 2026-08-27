@@ -1534,6 +1534,9 @@ func providerAwareOpenCodePreflight(prompt string) string {
 	if markerStart := strings.Index(prompt, startMarker); markerStart >= 0 {
 		if relativeEnd := strings.Index(prompt[markerStart:], endMarker); relativeEnd >= 0 {
 			markerEnd := markerStart + relativeEnd + len(endMarker)
+			if prompt[markerStart:markerEnd] == block {
+				return prompt
+			}
 			return replacePreservedPromptSection(prompt, markerStart, markerEnd, block)
 		}
 	}
