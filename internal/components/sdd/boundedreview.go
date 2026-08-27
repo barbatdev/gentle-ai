@@ -113,11 +113,14 @@ func renderBoundedReviewAssetBody(agent model.AgentID, path string) string {
 }
 
 func renderBoundedReviewAssetBodyFromContent(agent model.AgentID, path, content string) string {
+	if path == "opencode/sdd-orchestrator-kilocode-legacy.md" {
+		return content
+	}
 	if rendersReviewLifecycle(agent) {
 		content = strings.ReplaceAll(content, authorityFirstProcedurePlaceholder, authorityFirstTerminalProcedure())
 	}
 	content = strings.ReplaceAll(content, researchLifecyclePlaceholder, researchLifecycleContract())
-	if strings.HasSuffix(path, "/sdd-orchestrator.md") || path == "opencode/sdd-orchestrator-kilocode-legacy.md" {
+	if strings.HasSuffix(path, "/sdd-orchestrator.md") {
 		if rendersReviewLifecycle(agent) {
 			return replaceBoundedReviewSection(content, "#### Review Execution Contract", "Cost and Context Balance", boundedReviewContractFor(agent))
 		}

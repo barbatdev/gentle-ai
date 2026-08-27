@@ -163,7 +163,9 @@ Before routing, continuing, applying, verifying, or archiving an SDD change, **f
 
 ### SDD Session Preflight (HARD GATE)
 
-Before executing ANY SDD command or natural-language SDD request, load `gentle-ai-chained-pr` as the single provider resolver; OpenCode must not perform host detection. Resolve and retain the following fact before presenting delivery choices.
+Before executing ANY SDD command or natural-language SDD request, ensure this session has an explicit `SDD Session Preflight` decision block.
+
+Load `gentle-ai-chained-pr` as the single provider resolver; OpenCode must not perform host detection. Resolve and retain the following fact before presenting delivery choices.
 
 #### Delivery Route Fact (NON-AUTHORITATIVE)
 
@@ -181,9 +183,18 @@ Each field must be present, non-blank, well-formed, verifiable, fresh, and mutua
 
 This applies to `/sdd-new`, `/sdd-ff`, `/sdd-continue`, `/sdd-explore`, `/sdd-status`, `/sdd-apply`, `/sdd-verify`, `/sdd-archive`, and natural-language equivalents such as "use SDD to add dark mode" / "do it with SDD".
 
+Required preflight choices:
+
+1. **Execution mode**: `interactive` or `auto`.
+2. **Artifact store**: `openspec`, `engram`, or `both` when Engram is callable. If Engram is unavailable, offer only file/inline-safe choices.
+3. **Chained PR strategy**: the canonical `delivery_strategy` selected by the resolved route.
+4. **Review budget**: maximum changed lines before stopping for reviewer-burden approval.
+
+User-facing preflight question format:
+
 Use the `question` tool for SDD Session Preflight only when it is available in the current interactive runtime and all four groups are exactly representable for the resolved non-blocked route. Use the `question` tool only when it is available in the current interactive runtime and the complete route-conditioned envelope is exactly representable. While that native route is usable, do NOT render a duplicate plain-chat menu. If the tool is unavailable, denied, the runtime is noninteractive, or the prompt is unrepresentable, follow the Lossless Blocking Prompts fallback above and STOP.
 
-For a resolved non-blocked route: Ask all four preflight groups in one single `question` tool call so OpenCode can render the groups as tabs. The groups are Pace, Artifacts, the route-conditioned PR strategy, and Review. Do NOT run this as a sequential wizard. Do NOT issue four separate `question` tool calls. The route-conditioned groups preserve the existing Execution mode, Artifact store, Chained PR strategy, and Review budget semantics. Match the user's current language and active persona for question labels and descriptions. Treat the preflight UI as direct orchestrator conversation, not as a generated technical artifact. Technical artifacts still default to English, but this UI follows the user's conversation language/persona. Do NOT mix languages inside one grouped question. Do NOT show option codes. Do NOT show canonical values or other internal values in the UI. After the single grouped `question` tool call returns, map the selected human labels to canonical values internally. Do not reveal the canonical values in the UI.
+For a resolved non-blocked route, ask all four preflight groups in one single `question` tool call so OpenCode can render the groups as tabs. Ask all four preflight groups in one single `question` tool call; do not split the group set. The groups are Pace, Artifacts, the route-conditioned PR strategy, and Review. Do NOT run this as a sequential wizard. Do NOT issue four separate `question` tool calls. The route-conditioned groups preserve the existing Execution mode, Artifact store, Chained PR strategy, and Review budget semantics. Match the user's current language and active persona for question labels and descriptions. Treat the preflight UI as direct orchestrator conversation, not as a generated technical artifact. Technical artifacts still default to English, but this UI follows the user's conversation language/persona. Do NOT mix languages inside one grouped question. Do NOT show option codes or canonical values in the UI. Do NOT show option codes. Do NOT show canonical values or other internal values in the UI. After the single grouped `question` tool call returns, map the selected human labels to canonical values internally. Do not reveal the canonical values in the UI.
 
 ### GitHub-native route
 
@@ -193,6 +204,8 @@ Offer exactly these four localized groups in order:
 2. Artifacts: OpenSpec, Engram, Both.
 3. PRs: Ask me, Single PR, Auto.
 4. Review: 400 lines, 800 lines, Other.
+
+Map answers to canonical values internally after selection.
 
 #### Rendered GitHub-native route schema
 
@@ -307,7 +320,8 @@ Use the provider-owned Git-common-dir runtime ledger for every runtime-bearing `
 1. Before an actor or harness launch, call `gentle-ai sdd-attempt acquire --cwd <repo> --change <change> --request-id <id> --work-unit <label> --evidence-goal <goal> --max-attempts <count> --max-changed-lines <count>`.
 2. Launch only when acquire returns `state: proceed`, and retain its opaque `token`. `blocked` or `complete` stops the launch.
 3. After the external run, call `gentle-ai sdd-attempt settle --cwd <repo> --change <change> --token <token> --request-id <settle-id> ...` with a request ID distinct from the acquire operation's request ID, outcome, and bounded evidence. Reuse each operation's own ID only for its idempotent replay. Settle derives native binding/remediation inputs; pass `--successor-lineage` only for a distinct approved successor, otherwise the bound lineage remains its own successor.
-4. Route only from settle's `proceed`, `blocked`, or `complete` state. Full `status|begin|finish|reset` operations are diagnostic/compatibility surfaces; reset requires an explicit maintainer scope decision and is never automatic.
+4. On any failed external command (test command or non-test external command) before a later native block, disclose in this order: **Primary failure:** identify the command in a privacy-safe form, its failed/cancelled/non-zero outcome, and only bounded relevant error evidence; never persist or print secrets, private values, raw environment, or unbounded output. **Verification consequence:** state that the current SDD phase/verification did not pass. **Attempt settlement:** when the native contract requires it, settle the current token with the correct failed/interrupted outcome and diagnosis, and disclose the settlement result before any later acquire/refusal. **Secondary governance block:** label a later objective-change/acquire refusal as secondary, never as the cause of the external command failure, and preserve the exact provider-owned runnable continuation unchanged. Never imply Gentle AI or the native ledger caused the independent consumer command failure.
+5. Route only from settle's `proceed`, `blocked`, or `complete` state. Full `status|begin|finish|reset` operations are diagnostic/compatibility surfaces; reset requires an explicit maintainer scope decision and is never automatic.
 
 ### Artifact Store Mode
 
@@ -338,6 +352,8 @@ For a positively identified non-GitHub provider, the selectable values are `ask-
 For GitHub unavailable or unproven, or an unknown or ambiguous provider, STOP with actionable route-evidence requirements. Do not ask a strategy or chain question, and do not emit a delivery selection, chain choice, or exception field.
 
 ### Chain Strategy
+
+When delivery planning yields chained PRs, treat `chained-pr` (registry skill `gentle-ai-chained-pr`) as a required skill match: resolve it by registry name through this template's existing skill-resolution mechanism (the same one it already uses to pass skills to phases) and ensure the `sdd-tasks` and `sdd-apply` phases load and follow it BEFORE planning or creating any PR. Do not hardcode the skill path; defer resolution to that mechanism.
 
 Load `gentle-ai-chained-pr` as the sole route resolver; OpenCode must not perform host detection. It determines whether a chain prompt is route-applicable. Route facts, planning/phase approval, exception evidence, `auto-chain`, and RDD reviews/receipts never authorize remote create/submit/sync/update/merge operations.
 
