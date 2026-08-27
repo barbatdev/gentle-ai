@@ -18,6 +18,7 @@ Load when a planned PR may exceed **400 changed lines**, SDD forecasts chain ris
 - A positively identified non-GitHub host uses its host-specific adapter and portable chaining; a maintainer-approved `size:exception` is available only there, and parent closure requires the reference's fail-closed invariant: no dependent child may remain.
 - Issue approval, planning, SDD phase approval, `auto-chain`, RDD reviews/receipts, and delivery approval do not authorize remote create/submit/sync/update/merge operations; each consumes separate bounded authority.
 - Compose Chain Context into generated `pr-body.md`; never modify the target repository's PR template.
+- Use `Refs #<parent>` only as a visible non-closing link on intermediate slices; GitHub does not treat it as closure. Only a terminal scope-closing PR may use a closing keyword. Partial or abandoned chains leave the parent open, and reduced scope requires an explicit maintainer decision before closure.
 
 ## Decision Gates
 
