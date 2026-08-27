@@ -1519,7 +1519,7 @@ func providerAwareOpenCodePreflight(prompt string) string {
 		startMarker  = "<!-- gentle-ai:sdd-session-preflight-migration -->"
 		endMarker    = "<!-- /gentle-ai:sdd-session-preflight-migration -->"
 		startHeading = "### SDD Session Preflight (HARD GATE)"
-		endHeading   = "### SDD Entry Routing (MANDATORY)"
+		endHeading   = "### Automatic Mode Gatekeeper (MANDATORY)"
 	)
 
 	source := renderSDDOrchestratorAsset(model.AgentOpenCode)
