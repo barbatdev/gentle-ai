@@ -123,12 +123,14 @@ func TestNativeAttemptProfileRetainsAcceptedHandle(t *testing.T) {
 			writeNativeAttemptProfile(t, path, "{}")
 		}},
 		{"ancestor", func(t *testing.T, path string) {
-			if err := os.Rename(filepath.Dir(path), filepath.Dir(path)+".old"); err != nil {
+			parent := filepath.Dir(path)
+			if err := os.Rename(parent, parent+".old"); err != nil {
+				if os.IsPermission(err) {
+					return
+				}
 				t.Fatal(err)
 			}
-			if err := os.Mkdir(filepath.Dir(path), 0o755); err != nil {
-				t.Fatal(err)
-			}
+			mkdir(t, parent)
 			writeNativeAttemptProfile(t, path, "{}")
 		}},
 	} {
@@ -138,9 +140,7 @@ func TestNativeAttemptProfileRetainsAcceptedHandle(t *testing.T) {
 				t.Fatal(err)
 			}
 			path := filepath.Join(root, "profiles", "profile.json")
-			if err := os.Mkdir(filepath.Dir(path), 0o755); err != nil {
-				t.Fatal(err)
-			}
+			mkdir(t, filepath.Dir(path))
 			writeNativeAttemptProfile(t, path, nativeAttemptProfileJSON(root))
 			handle, err := os.OpenRoot(root)
 			if err != nil {
