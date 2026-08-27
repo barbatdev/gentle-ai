@@ -52,6 +52,8 @@ var coreJourneyReviewModes = map[string]ReviewPrecondition{
 	"j3043-opencode-managed-background-activation":                              reviewUntouched,
 	"j117-doctor-dangling-managed-config":                                       reviewUntouched,
 	"j118-doctor-dangling-config-ancestor":                                      reviewUntouched,
+	"j119-github-route-requires-trusted-capability-evidence":                    reviewUntouched,
+	"j120-gitlab-route-selects-portable-policy-without-authority":               reviewUntouched,
 	"j31-nonsense-mode-value":                                                   reviewUntouched,
 	"j32-recovery-of-a-recovery":                                                reviewOptedIn,
 	"j33-escalate-then-recover":                                                 reviewOptedIn,

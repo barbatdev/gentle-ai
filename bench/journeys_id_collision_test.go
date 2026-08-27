@@ -68,6 +68,7 @@ func journeySources() []journeySource {
 		{"journeys_issue3321.go", issue3321Journeys()},
 		{"journeys_issue3587.go", issue3587Journeys()},
 		{"journeys_issue3748.go", issue3748Journeys()},
+		{"journeys_delivery_route.go", deliveryRouteJourneys()},
 	}
 	for index := range sources {
 		sources[index].Journeys = removeRetiredAtomicJourneys(sources[index].Journeys)
