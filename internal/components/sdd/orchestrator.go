@@ -134,8 +134,10 @@ func sddOrchestratorAsset(agent model.AgentID) string {
 		return "kiro/sdd-orchestrator.md"
 	case model.AgentHermes:
 		return "hermes/sdd-orchestrator.md"
-	case model.AgentOpenCode, model.AgentKilocode:
+	case model.AgentOpenCode:
 		return "opencode/sdd-orchestrator.md"
+	case model.AgentKilocode:
+		return "opencode/sdd-orchestrator-kilocode-legacy.md"
 	default:
 		return "generic/sdd-orchestrator.md"
 	}

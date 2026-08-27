@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/gentleman-programming/gentle-ai/v2/internal/assets"
 	"github.com/gentleman-programming/gentle-ai/v2/internal/model"
 )
 
@@ -325,18 +326,22 @@ func TestOpenCodeNamedProfileOrchestratorPreservesCurrentContract(t *testing.T) 
 	}
 }
 
-func TestKilocodeOrchestratorBaselineSharesHistoricalAssetWithoutReviewLifecycle(t *testing.T) {
-	if got, want := sddOrchestratorAsset(model.AgentKilocode), sddOrchestratorAsset(model.AgentOpenCode); got != want {
-		t.Fatalf("Kilocode orchestrator asset = %q, want shared historical asset %q", got, want)
+func TestKilocodeOrchestratorBaselineUsesDedicatedLegacyAsset(t *testing.T) {
+	const legacyAsset = "opencode/sdd-orchestrator-kilocode-legacy.md"
+	if got := sddOrchestratorAsset(model.AgentKilocode); got != legacyAsset {
+		t.Fatalf("Kilocode orchestrator asset = %q, want dedicated legacy asset %q", got, legacyAsset)
 	}
 
 	content := renderSDDOrchestratorAsset(model.AgentKilocode)
-	if strings.Contains(content, "### Authority-First Terminal Procedure") {
-		t.Fatal("Kilocode baseline received the shared review lifecycle")
+	if want := assets.MustRead(legacyAsset); content != want {
+		t.Fatal("Kilocode renderer did not preserve the exact dedicated legacy asset")
 	}
-	for _, want := range []string{"## SDD Workflow", "### Native SDD Dispatcher Guard", "### SDD Init Guard (MANDATORY)"} {
+	if strings.Contains(content, "### Authority-First Terminal Procedure") || strings.Contains(content, "### Provider-Aware Delivery Route") {
+		t.Fatal("Kilocode legacy baseline received active OpenCode delivery behavior")
+	}
+	for _, want := range []string{"### SDD Session Preflight (HARD GATE)", "### Delivery Strategy", "### Review Workload Guard (MANDATORY)"} {
 		if !strings.Contains(content, want) {
-			t.Fatalf("Kilocode baseline lost normal SDD clause %q", want)
+			t.Fatalf("Kilocode legacy baseline lost historical SDD clause %q", want)
 		}
 	}
 
