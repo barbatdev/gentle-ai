@@ -332,19 +332,36 @@ func TestKilocodeOrchestratorBaselineUsesDedicatedLegacyAsset(t *testing.T) {
 		t.Fatalf("Kilocode orchestrator asset = %q, want dedicated legacy asset %q", got, legacyAsset)
 	}
 
+	raw := assets.MustRead(legacyAsset)
+	for _, unwanted := range []string{"### Authority-First Terminal Procedure", "### Provider-Aware Delivery Route"} {
+		if strings.Contains(raw, unwanted) {
+			t.Fatalf("Kilocode legacy source contains OpenCode-only delivery behavior %q", unwanted)
+		}
+	}
+	for _, want := range []string{"### SDD Session Preflight (HARD GATE)", "### Delivery Strategy", "### Review Workload Guard (MANDATORY)", researchLifecyclePlaceholder} {
+		if !strings.Contains(raw, want) {
+			t.Fatalf("Kilocode legacy source lost historical SDD clause %q", want)
+		}
+	}
+
 	content := renderSDDOrchestratorAsset(model.AgentKilocode)
-	if want := assets.MustRead(legacyAsset); content != want {
-		t.Fatal("Kilocode renderer did not preserve the exact dedicated legacy asset")
+	if content == raw {
+		t.Fatal("Kilocode renderer bypassed normal bounded-review rendering")
+	}
+	for _, unresolved := range []string{researchLifecyclePlaceholder, runtimeAgentIDPlaceholder} {
+		if strings.Contains(content, unresolved) {
+			t.Fatalf("Kilocode rendered prompt retained unresolved placeholder %q", unresolved)
+		}
+	}
+	if !strings.Contains(content, "### Research and Pre-Proposal Gate (MANDATORY)") {
+		t.Fatal("Kilocode rendered prompt did not resolve the shared research lifecycle contract")
+	}
+	if strings.Contains(content, "#### Review Execution Contract") {
+		t.Fatal("Kilocode rendered prompt retained the unsupported review lifecycle contract")
 	}
 	if strings.Contains(content, "### Authority-First Terminal Procedure") || strings.Contains(content, "### Provider-Aware Delivery Route") {
 		t.Fatal("Kilocode legacy baseline received active OpenCode delivery behavior")
 	}
-	for _, want := range []string{"### SDD Session Preflight (HARD GATE)", "### Delivery Strategy", "### Review Workload Guard (MANDATORY)"} {
-		if !strings.Contains(content, want) {
-			t.Fatalf("Kilocode legacy baseline lost historical SDD clause %q", want)
-		}
-	}
-
 	if strings.Contains(content, openCodeBackgroundPolicyMarker) {
 		t.Fatal("Kilocode baseline received an OpenCode-only background addendum")
 	}

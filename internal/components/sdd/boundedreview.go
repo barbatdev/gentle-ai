@@ -113,14 +113,11 @@ func renderBoundedReviewAssetBody(agent model.AgentID, path string) string {
 }
 
 func renderBoundedReviewAssetBodyFromContent(agent model.AgentID, path, content string) string {
-	if path == "opencode/sdd-orchestrator-kilocode-legacy.md" {
-		return content
-	}
 	if rendersReviewLifecycle(agent) {
 		content = strings.ReplaceAll(content, authorityFirstProcedurePlaceholder, authorityFirstTerminalProcedure())
 	}
 	content = strings.ReplaceAll(content, researchLifecyclePlaceholder, researchLifecycleContract())
-	if strings.HasSuffix(path, "/sdd-orchestrator.md") {
+	if isSDDOrchestratorAsset(path) {
 		if rendersReviewLifecycle(agent) {
 			return replaceBoundedReviewSection(content, "#### Review Execution Contract", "Cost and Context Balance", boundedReviewContractFor(agent))
 		}
@@ -149,6 +146,10 @@ func renderBoundedReviewAssetBodyFromContent(agent model.AgentID, path, content 
 // manifest. An agent cannot receive the shared lifecycle prose unless it
 // advertises the review transport contract; generic SDD composition therefore
 // remains safe for runtimes outside the closed RDD set.
+func isSDDOrchestratorAsset(path string) bool {
+	return strings.HasSuffix(path, "/sdd-orchestrator.md") || path == "opencode/sdd-orchestrator-kilocode-legacy.md"
+}
+
 func rendersReviewLifecycle(agent model.AgentID) bool {
 	manifest, err := capabilitymanifest.ForAgent(agent)
 	return err == nil && manifest.Advertises(capabilitymanifest.ContractReviewTransportV1)
