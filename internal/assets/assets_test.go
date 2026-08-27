@@ -131,6 +131,37 @@ func TestAllShippedOrchestratorsKeepDeliveryUnmanaged(t *testing.T) {
 	}
 }
 
+func TestProviderAwareSDDDeliveryContract(t *testing.T) {
+	assets := map[string][]string{
+		"generic/sdd-orchestrator.md": {
+			"### Provider-Aware Delivery Route",
+			"GitHub-native: `ask-on-risk`, `auto-chain`, or `single-pr`",
+			"GitHub without exact current native capability proof: stop",
+			"Positively identified non-GitHub provider",
+			"`feature-branch-chain` and `exception-ok`",
+			"Unknown or ambiguous provider: stop",
+			"Session review budget is separate from the exact per-PR changed-line cap",
+			"Repository-specific governance must not be projected into user repositories",
+		},
+		"skills/_shared/sdd-phase-common.md": {
+			"## E. Provider-Aware Review Workload Guard",
+			"### GitHub-native schema",
+			"### Portable schema",
+			"### Blocked schema",
+		},
+		"skills/sdd-tasks/SKILL.md": {"## Delivery Route Fact (NON-AUTHORITATIVE)", "### GitHub-native schema", "### Portable schema", "### Blocked schema"},
+		"skills/sdd-apply/SKILL.md": {"#### Step 2a: Revalidate the Delivery Route", "### GitHub-native schema", "### Portable schema", "### Blocked schema"},
+	}
+	for path, required := range assets {
+		content := MustRead(path)
+		for _, want := range required {
+			if !strings.Contains(content, want) {
+				t.Fatalf("%s missing provider-aware delivery contract %q", path, want)
+			}
+		}
+	}
+}
+
 func TestOrchestratorsRejectDelegationBypassLanguage(t *testing.T) {
 	contents := map[string]string{
 		"claude/sdd-orchestrator.md":   MustRead("claude/sdd-orchestrator.md"),

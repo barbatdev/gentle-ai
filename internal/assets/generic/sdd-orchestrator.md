@@ -234,20 +234,31 @@ If the user doesn't specify, detect: if engram is available → default to `engr
 
 Cache the artifact store choice for the session. Pass it as `artifact_store.mode` to every sub-agent launch.
 
+### Provider-Aware Delivery Route
+
+Before collecting a delivery strategy, resolve the provider route through `gentle-ai-chained-pr`. Keep route evidence non-authoritative: planning, phase approval, review approval, and a session budget never authorize a remote mutation.
+
+- **GitHub-native: `ask-on-risk`, `auto-chain`, or `single-pr`.** Use this domain only when exact current native capability proof admits the route. An over-budget `single-pr` stops.
+- **GitHub without exact current native capability proof: stop.** Do not install, infer a command, or substitute manual GitHub choreography.
+- **Positively identified non-GitHub provider:** retain portable chaining, including `feature-branch-chain` and `exception-ok`, subject to verifiable maintainer exception evidence.
+- **Unknown or ambiguous provider: stop.** Do not emit a strategy, chain choice, or exception.
+
+Session review budget is separate from the exact per-PR changed-line cap. Repository-specific governance must not be projected into user repositories; only the resolved provider route and repository evidence control this delivery decision.
+
 ### Delivery Strategy
 
-On the first `/sdd-new`, `/sdd-ff`, or `/sdd-continue` (or an equivalent natural-language request) in a session, ask once for and cache delivery strategy: `ask-on-risk` (default), `auto-chain`, `single-pr`, or `exception-ok`. Pass it as `delivery_strategy` to `sdd-tasks` and `sdd-apply` prompts.
+After a positive route resolution, cache only a route-conditioned `delivery_strategy` and pass the route fact to `sdd-tasks` and `sdd-apply`. GitHub-native permits `ask-on-risk`, `auto-chain`, and `single-pr`; portable routes additionally permit `exception-ok` with the required maintainer evidence.
 
 ### Chain Strategy
 
-When `delivery_strategy` results in chained PRs (either by user choice via `ask-on-risk` or automatically via `auto-chain`), ask the user which chain strategy to use:
+For a positively identified portable route that needs a chain, ask the user which chain strategy to use:
 
 - **`stacked-to-main`**: Each PR merges to main in order. Fast iteration, fix on the go. Best for speed-first teams and independent slices.
-- **`feature-branch-chain`**: The feature/tracker branch accumulates final integration; PR #1 targets the tracker branch, later child PRs target the immediate previous PR branch so review diffs stay focused. Only the tracker merges to main. Best for rollback control and coordinated releases.
+- **`feature-branch-chain`**: The feature/tracker branch accumulates the final integration; PR #1 targets the tracker branch, later child PRs target the immediate previous PR branch so review diffs stay focused. Only the tracker merges to main. Best for rollback control and coordinated releases.
 
-Cache the chain strategy for the session. Pass it as `chain_strategy` to `sdd-tasks` and `sdd-apply` prompts alongside `delivery_strategy`. Do not ask again unless the user changes scope.
+Cache the portable chain strategy and pass it with the route-conditioned `delivery_strategy`. Never ask for or record a chain strategy on a blocked or GitHub-native route.
 
-When delivery planning yields chained PRs, treat `chained-pr` (registry skill `gentle-ai-chained-pr`) as a required skill match: resolve it by registry name through this template's existing skill-resolution mechanism (the same one it already uses to pass skills to phases) and ensure the `sdd-tasks` and `sdd-apply` phases load and follow it BEFORE planning or creating any PR. Do not hardcode the skill path; defer resolution to that mechanism.
+When delivery planning yields chained PRs, treat `chained-pr` (registry skill `gentle-ai-chained-pr`) as a required skill match: resolve it by registry name through this template's existing skill-resolution mechanism and ensure the `sdd-tasks` and `sdd-apply` phases load and follow it BEFORE planning or creating any PR. Do not hardcode the skill path; defer resolution to that mechanism.
 
 ### Dependency Graph
 
@@ -266,13 +277,13 @@ Each phase returns: `status`, `executive_summary`, `artifacts`, `next_recommende
 
 After `sdd-tasks` completes and before launching `sdd-apply`, inspect the task result summary for `Review Workload Forecast`.
 
-If it says `Chained PRs recommended: Yes`, `400-line budget risk: High`, estimated changed lines exceed 400, or `Decision needed before apply: Yes`, apply the cached `delivery_strategy`: `ask-on-risk` asks, `auto-chain` asks for a missing `chain_strategy` and applies only the next PR slice, `single-pr` requires `size:exception`, and `exception-ok` records the exception.
+If it says `Chained PRs recommended: Yes`, `400-line budget risk: High`, estimated changed lines exceed 400, or `Decision needed before apply: Yes`, apply only the already-resolved route schema. GitHub-native `ask-on-risk` asks, `auto-chain` applies only the next slice, and an over-budget `single-pr` stops. Portable routes may use a chain strategy or `exception-ok` only with the recorded maintainer evidence. Blocked, unknown, ambiguous, or GitHub-unproven routes stop before apply.
 
-Any other `delivery_strategy` value is invalid. Do NOT pick the nearest branch and do NOT proceed: STOP, report the unrecognised value, and re-collect the delivery strategy before `sdd-apply` runs.
+A value outside the resolved route schema is invalid. Do NOT pick the nearest branch and do NOT proceed: STOP and preserve the actionable route stop before `sdd-apply` runs.
 
 Do this even in Automatic mode. Automatic mode does not override reviewer burnout protection.
 
-When launching `sdd-apply`, include the resolved `delivery_strategy`, `chain_strategy`, and any chosen PR boundary/exception in the prompt.
+When launching `sdd-apply`, include the resolved route fact, route-conditioned `delivery_strategy`, portable `chain_strategy` when applicable, and any portable exception evidence.
 
 <!-- /section:model-capable -->
 
