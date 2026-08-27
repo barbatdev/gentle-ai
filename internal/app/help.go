@@ -25,8 +25,9 @@ COMMANDS
   sdd-attempt <acquire|settle> --cwd <repo> --change <change>
                Run bounded normal orchestration without exposing runtime history
   sdd-verify-validate --input <path|-> --requirements <n> --scenarios <n>
+  sdd-verify-applicability [--cwd <repo>] [--projection workspace|staged]
                Validate exact verification-report bytes without persistence
-  review start [--cwd <repo>] [--base-ref <ref>] [--focus <risk|resilience|readability|reliability>]
+  review start [--cwd <repo>] [--focus <risk|resilience|readability|reliability>]
   review capture-result --lineage <id> --target <id> --lens <lens> --order <n> --input <review.json>
                Admit one reviewer result; the final capture closes and burns its review
   review capture-correction-plan --lineage <id> --target <id> --expected-revision <rev> --request-hash <hash> --correction-lines <n>
