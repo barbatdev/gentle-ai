@@ -2289,10 +2289,10 @@ func applyRuntimeFinishEvent(replay *runtimeReplay, event *runtimeFinishEvent, u
 	replay.Status.ActiveAttempt = nil
 	replay.Status.CumulativeChangedLines += event.ChangedLines
 	replay.Status.LifetimeChangedLines += event.ChangedLines
-	// The objective budget refunds a call that advanced the unit, up to the
-	// configured ceiling. LifetimeAttempts is never refunded, so the chain still
-	// records every call that ran.
-	if runtimeAttemptDeliveredIncrement(event.Outcome, event.ChangedLines) && replay.Status.CumulativeAttempts > 0 &&
+	// The objective budget refunds eligible settlements up to the configured
+	// ceiling. LifetimeAttempts is never refunded, so the chain still records
+	// every call that ran.
+	if runtimeAttemptRefundEligible(event.Outcome, event.ChangedLines, event.HarnessDisposition) && replay.Status.CumulativeAttempts > 0 &&
 		runtimeRefundedAttempts(replay.Status) <= replay.Status.Objective.MaxAttempts {
 		replay.Status.CumulativeAttempts--
 	}
@@ -2324,27 +2324,21 @@ func runtimeRefundedAttempts(status RuntimeStatus) int {
 	refunded := 0
 	for _, attempt := range status.Attempts {
 		if attempt.ObjectiveID == status.Objective.ID && attempt.ObjectiveGeneration == status.Objective.Generation &&
-			runtimeAttemptDeliveredIncrement(attempt.Outcome, attempt.ChangedLines) {
+			runtimeAttemptRefundEligible(attempt.Outcome, attempt.ChangedLines, attempt.HarnessDisposition) {
 			refunded++
 		}
 	}
 	return refunded
 }
 
-// runtimeAttemptDeliveredIncrement reports whether a settlement earned back the
-// call it spent. #3815: RuntimeAttempt was one provider call, one unit of
-// budget and one unit of work at once, so a work unit that legitimately needs
-// several calls exhausted its objective by accounting rather than by failure —
-// #3808, where two calls delivered zero production and ended at
-// decision_required.
-//
-// An interrupted call that left measurable increment advanced the unit, so it
-// does not discharge an attempt against the objective. A call that delivered
-// nothing is still spent, which is what keeps max_attempts bounding calls that
-// produce nothing. The refund cannot run away: earning one costs delivered
-// lines, and cumulative changed lines remain capped by the objective.
-func runtimeAttemptDeliveredIncrement(outcome AttemptOutcome, changedLines int) bool {
-	return outcome == AttemptInterrupted && changedLines > 0
+// runtimeAttemptRefundEligible reports whether a settlement earned back the
+// call it spent. An interrupted call that left measurable increment advanced
+// the unit, while a failed setup invalidated before any change left no accepted
+// attempt to charge. Other outcomes, reused failed harnesses, and failures that
+// changed the candidate remain spent.
+func runtimeAttemptRefundEligible(outcome AttemptOutcome, changedLines int, harnessDisposition HarnessDisposition) bool {
+	return (outcome == AttemptInterrupted && changedLines > 0) ||
+		(outcome == AttemptFailed && harnessDisposition == HarnessInvalidated && changedLines == 0)
 }
 
 // applyRuntimeGrantEvent accumulates a grant's canonical roots into the

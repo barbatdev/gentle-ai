@@ -84,6 +84,104 @@ func TestInterruptedCallThatDeliveredIncrementDoesNotSpendTheObjectiveBudget(t *
 	}
 }
 
+// TestRecoverableSetupFailuresDoNotConsumeAcceptanceAllowance proves that
+// recoverable setup failures invalidated before acceptance preserve the
+// objective allowance while retaining their global attempt history.
+func TestRecoverableSetupFailuresDoNotConsumeAcceptanceAllowance(t *testing.T) {
+	repo := initRuntimeLedgerRepo(t)
+	store, err := OpenRuntimeStore(context.Background(), repo, "acceptance-setup-budget")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	const (
+		setupWorkUnit = "environment-cwd-and-harness-setup"
+		evidenceGoal  = "open acceptance after recoverable setup failures"
+		maxAttempts   = 2
+	)
+	setupFailures := []struct {
+		beginID   string
+		finishID  string
+		diagnosis string
+	}{
+		{
+			beginID: "environment-cwd-setup-begin", finishID: "environment-cwd-setup-finish",
+			diagnosis: "environment and cwd setup failed before acceptance",
+		},
+		{
+			beginID: "harness-setup-begin", finishID: "harness-setup-finish",
+			diagnosis: "harness setup failed before acceptance",
+		},
+	}
+
+	expected := ""
+	for index, setup := range setupFailures {
+		started, err := store.Begin(context.Background(), BeginAttemptRequest{
+			ExpectedRevision: expected, RequestID: setup.beginID, WorkUnit: setupWorkUnit,
+			EvidenceGoal: evidenceGoal, MaxAttempts: maxAttempts, MaxChangedLines: 20,
+		})
+		if err != nil {
+			t.Fatalf("record setup failure %d: %v", index+1, err)
+		}
+		finished, err := store.Finish(context.Background(), FinishAttemptRequest{
+			ExpectedRevision: started.Revision, RequestID: setup.finishID, Outcome: AttemptFailed,
+			EvidenceRevision: runtimeTestHash(byte('a' + index)), Diagnosis: setup.diagnosis,
+			HarnessDisposition: HarnessInvalidated, CleanupEvidence: "recoverable setup cleanup completed",
+			ProcessEvidence: "setup process scan found no surviving descendants",
+		})
+		if err != nil {
+			t.Fatalf("finish setup failure %d: %v", index+1, err)
+		}
+		expected = finished.Revision
+	}
+
+	acceptance, err := store.Begin(context.Background(), BeginAttemptRequest{
+		ExpectedRevision: expected, RequestID: "acceptance-begin", WorkUnit: setupWorkUnit,
+		EvidenceGoal: evidenceGoal, MaxAttempts: maxAttempts, MaxChangedLines: 20,
+	})
+	if err != nil {
+		t.Fatalf("first acceptance attempt after recoverable setup failures = %v, want acceptance allowance ordinal 1/%d", err, maxAttempts)
+	}
+	if acceptance.ActiveAttempt == nil {
+		t.Fatal("first acceptance allowance has no active attempt")
+	}
+	if acceptance.CumulativeAttempts != 1 || acceptance.Objective == nil || acceptance.Objective.MaxAttempts != maxAttempts {
+		t.Fatalf("first acceptance allowance = %#v, want cumulative allowance 1/%d", acceptance, maxAttempts)
+	}
+	if acceptance.ActiveAttempt.Ordinal != 3 {
+		t.Errorf("ActiveAttempt.Ordinal = %d, want global ordinal 3", acceptance.ActiveAttempt.Ordinal)
+	}
+	if acceptance.LifetimeAttempts != 3 {
+		t.Errorf("LifetimeAttempts = %d, want 3; setup failures remain in global history", acceptance.LifetimeAttempts)
+	}
+}
+
+func TestRuntimeAttemptRefundEligibility(t *testing.T) {
+	tests := []struct {
+		name               string
+		outcome            AttemptOutcome
+		changedLines       int
+		harnessDisposition HarnessDisposition
+		want               bool
+	}{
+		{name: "interrupted increment with reused harness", outcome: AttemptInterrupted, changedLines: 1, harnessDisposition: HarnessReused, want: true},
+		{name: "interrupted without increment", outcome: AttemptInterrupted, harnessDisposition: HarnessReused, want: false},
+		{name: "failed invalidated setup without increment", outcome: AttemptFailed, harnessDisposition: HarnessInvalidated, want: true},
+		{name: "failed reused harness without increment", outcome: AttemptFailed, harnessDisposition: HarnessReused, want: false},
+		{name: "failed invalidated setup with increment", outcome: AttemptFailed, changedLines: 1, harnessDisposition: HarnessInvalidated, want: false},
+		{name: "passed", outcome: AttemptPassed, harnessDisposition: HarnessInvalidated, want: false},
+		{name: "unknown", outcome: AttemptOutcome("unknown"), harnessDisposition: HarnessInvalidated, want: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := runtimeAttemptRefundEligible(tt.outcome, tt.changedLines, tt.harnessDisposition); got != tt.want {
+				t.Errorf("runtimeAttemptRefundEligible(%q, %d, %q) = %t, want %t", tt.outcome, tt.changedLines, tt.harnessDisposition, got, tt.want)
+			}
+		})
+	}
+}
+
 // TestInterruptedCallThatDeliveredNothingStillSpendsTheBudget pins the other
 // half: a refund is earned by delivering, never granted for free.
 func TestInterruptedCallThatDeliveredNothingStillSpendsTheBudget(t *testing.T) {
