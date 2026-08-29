@@ -98,9 +98,15 @@ func BudgetConsentEnvelope(in BudgetConsentInput) (BudgetConsentResult, error) {
 		// times because nothing distinguished the tool failing from their code
 		// failing. Saying so is what makes this answerable.
 		headline = "This work unit spent its attempt budget without ever running your work."
+		harnessFailures := fmt.Sprintf("%d harness failures", in.HarnessFailures)
+		notEvidence := "Those failed attempts are not evidence about your change: your change never ran."
+		if in.HarnessFailures == 1 {
+			harnessFailures = "1 harness failure"
+			notEvidence = "That failed attempt is not evidence about your change: your change never ran."
+		}
 		reason = fmt.Sprintf(
-			"%d of the %d attempts ended before the work started, because the harness meant to run it could not be built. Those attempts are not evidence about your change: your change never ran.",
-			in.HarnessFailures, in.CumulativeAttempts)
+			"%s ended before the work started, because the harness meant to run it could not be built. %s",
+			harnessFailures, notEvidence)
 		evidence = append(evidence, fmt.Sprintf("attempts that never ran the work: %d", in.HarnessFailures))
 		if in.HarnessFailures > 1 {
 			evidence = append(evidence,

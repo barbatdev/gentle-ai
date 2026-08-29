@@ -79,6 +79,24 @@ func TestHarnessFailureIsTypedSoTheQuestionCanBeAnswered(t *testing.T) {
 	if !strings.Contains(text, "harness") {
 		t.Fatalf("the envelope does not say the attempts were spent on harness failures:\n%s", text)
 	}
+	singular, err := sddstatus.BudgetConsentEnvelope(sddstatus.BudgetConsentInput{
+		Repo: "/repo", Change: "demo", Revision: "sha256:" + strings.Repeat("a", 64),
+		MaxAttempts: 1, CumulativeAttempts: 1, HarnessFailures: 1,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	singularText := singular.Headline + "\n" + singular.Reason + "\n" + strings.Join(singular.Evidence, "\n")
+	if !strings.Contains(singularText, "1 harness failure") {
+		t.Fatalf("the singular envelope does not name one harness failure:\n%s", singularText)
+	}
+	if !strings.Contains(singularText, "That failed attempt is not evidence") {
+		t.Fatalf("the singular envelope does not use singular failed-attempt evidence:\n%s", singularText)
+	}
+	if strings.Contains(singularText, "Those attempts") {
+		t.Fatalf("the singular envelope uses plural failed-attempt evidence:\n%s", singularText)
+	}
+
 	// The second harness failure is information, not noise: it says the worker
 	// cannot converge. The human must be told that rather than being asked to
 	// infer it.
@@ -167,6 +185,49 @@ func TestInvalidatedHarnessFailurePreservesAcceptanceAllowanceEndToEnd(t *testin
 	if active.Objective == nil || active.Objective.MaxAttempts != 1 || active.ActiveAttempt == nil || active.ActiveAttempt.Ordinal != 2 ||
 		active.CumulativeAttempts != 1 || active.LifetimeAttempts != 2 {
 		t.Fatalf("first acceptance attempt after invalidated harness = %#v, want cumulative 1/1 and global ordinal/lifetime 2", active)
+	}
+
+	// The refund cap preserves the first harness failure's acceptance allowance,
+	// but the second failure remains immutable history and requires a maintainer
+	// decision rather than an unbounded automatic retry.
+	runCompactSDDAttempt(t, []string{
+		"settle", "--cwd", repo, "--change", change, "--token", next.Token, "--request-id", "h4",
+		"--outcome", "failed", "--evidence-revision", cliAttemptHash('b'),
+		"--diagnosis", "the harness could not be constructed again; no consumer command ran",
+		"--harness-disposition", "invalidated",
+		"--cleanup-evidence", "container removed", "--process-evidence", "no descendants",
+	})
+
+	exhausted := runSDDAttemptStatus(t, []string{
+		"status", "--cwd", repo, "--change", change,
+		"--work-unit", "acceptance", "--evidence-goal", "postgres acceptance",
+		"--max-attempts", "1", "--max-changed-lines", "400",
+	})
+	if exhausted.Objective == nil || exhausted.Objective.MaxAttempts != 1 || exhausted.CumulativeAttempts != 1 ||
+		exhausted.LifetimeAttempts != 2 || exhausted.CumulativeChangedLines != 0 {
+		t.Fatalf("second invalidated harness settlement = %#v, want cumulative 1/1, lifetime 2, and zero native changed lines", exhausted)
+	}
+	if len(exhausted.Attempts) != 2 || exhausted.Attempts[1].Outcome != sddstatus.AttemptFailed ||
+		exhausted.Attempts[1].HarnessDisposition != sddstatus.HarnessInvalidated || exhausted.Attempts[1].ChangedLines != 0 {
+		t.Fatalf("second settlement = %#v, want failed invalidated harness with zero native changed lines", exhausted.Attempts)
+	}
+	if !exhausted.DecisionRequired || exhausted.BlockedReason != "maintainer_decision" || exhausted.Consent == nil ||
+		!exhausted.Consent.Blocking || len(exhausted.Consent.Choices) != 2 {
+		t.Fatalf("second invalidated harness must ask a blocking maintainer decision: %#v", exhausted)
+	}
+	grant := exhausted.Consent.Choices[0].Invocation
+	if exhausted.Consent.Choices[0].Answer != "granted" || exhausted.Consent.Choices[1].Answer != "declined" ||
+		!strings.Contains(grant, "gentle-ai sdd-attempt reset") || !strings.Contains(grant, exhausted.Revision) {
+		t.Fatalf("maintainer decision must offer a runnable exact-revision reset: %#v", exhausted.Consent.Choices)
+	}
+	consentText := exhausted.Consent.Headline + "\n" + exhausted.Consent.Reason + "\n" + strings.Join(exhausted.Consent.Evidence, "\n")
+	for _, want := range []string{"2 harness failures", "never ran"} {
+		if !strings.Contains(consentText, want) {
+			t.Fatalf("combined consent text missing %q:\n%s", want, consentText)
+		}
+	}
+	if strings.Contains(consentText, "2 of the 1 attempts") {
+		t.Fatalf("combined consent text reports an impossible denominator:\n%s", consentText)
 	}
 }
 
