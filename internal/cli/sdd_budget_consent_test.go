@@ -109,11 +109,10 @@ func TestBudgetConsentRefusesAnIncompleteEnvelope(t *testing.T) {
 	}
 }
 
-// TestExhaustedBudgetSurfacesTheQuestionEndToEnd is the half a constructor
-// cannot deliver. An envelope nobody renders is #2471's root 9, and it is
-// exactly how #2588's reporter ended up answering the same implicit question
-// four times: the ledger knew, and never asked.
-func TestExhaustedBudgetSurfacesTheQuestionEndToEnd(t *testing.T) {
+// TestInvalidatedHarnessFailurePreservesAcceptanceAllowanceEndToEnd proves
+// #3152 through the CLI boundary: a harness that never ran the work remains in
+// immutable history without spending the acceptance allowance.
+func TestInvalidatedHarnessFailurePreservesAcceptanceAllowanceEndToEnd(t *testing.T) {
 	reviewModeHome(t)
 	repo := initReviewCLIRepo(t)
 	const change = "budget-consent-e2e"
@@ -144,31 +143,30 @@ func TestExhaustedBudgetSurfacesTheQuestionEndToEnd(t *testing.T) {
 		"--cleanup-evidence", "container removed", "--process-evidence", "no descendants",
 	})
 
-	// The budget is gone. Status must now ASK, with the accounting and a
-	// verbatim-runnable grant.
-	scoped := runSDDAttemptStatus(t, []string{
+	preserved := runSDDAttemptStatus(t, []string{
 		"status", "--cwd", repo, "--change", change,
 		"--work-unit", "acceptance", "--evidence-goal", "postgres acceptance",
 		"--max-attempts", "1", "--max-changed-lines", "400",
 	})
-	if scoped.BlockedReason != "maintainer_decision" {
-		t.Fatalf("blocked_reason = %q, want maintainer_decision", scoped.BlockedReason)
+	if preserved.CumulativeAttempts != 0 || preserved.LifetimeAttempts != 1 || preserved.DecisionRequired || preserved.NextAction != sddstatus.RuntimeActionBegin {
+		t.Fatalf("status after invalidated harness = %#v, want preserved acceptance allowance and global history", preserved)
 	}
-	if scoped.Consent == nil {
-		t.Fatal("the exhausted budget dead-ended instead of asking; the ledger knew it needed a decision and never put the question in front of anyone (#2588)")
+	if preserved.BlockedReason != "" || preserved.Consent != nil {
+		t.Fatalf("invalidated harness blocked acceptance: reason=%q consent=%#v", preserved.BlockedReason, preserved.Consent)
 	}
-	if !scoped.Consent.Blocking || len(scoped.Consent.Choices) != 2 {
-		t.Fatalf("consent = %#v, want a blocking two-choice question", scoped.Consent)
+
+	next, _ := runCompactSDDAttempt(t, []string{
+		"acquire", "--cwd", repo, "--change", change, "--request-id", "h3",
+		"--work-unit", "acceptance", "--evidence-goal", "postgres acceptance",
+		"--max-attempts", "1", "--max-changed-lines", "400",
+	})
+	if next.State != "proceed" {
+		t.Fatalf("first acceptance acquire after invalidated harness = %#v, want proceed", next)
 	}
-	if !strings.Contains(scoped.Consent.Choices[0].Invocation, "gentle-ai sdd-attempt reset") ||
-		!strings.Contains(scoped.Consent.Choices[0].Invocation, scoped.Revision) {
-		t.Fatalf("the grant is not runnable verbatim against this exact ledger revision:\n%s", scoped.Consent.Choices[0].Invocation)
-	}
-	// And it must say the attempts produced no evidence about the candidate,
-	// or the human cannot tell this apart from their own code failing.
-	text := scoped.Consent.Headline + scoped.Consent.Reason + strings.Join(scoped.Consent.Evidence, "\n")
-	if !strings.Contains(text, "harness") || !strings.Contains(text, "never ran") {
-		t.Fatalf("the question does not distinguish a provider defect from the candidate failing:\n%s", text)
+	active := runSDDAttemptStatus(t, []string{"status", "--cwd", repo, "--change", change})
+	if active.Objective == nil || active.Objective.MaxAttempts != 1 || active.ActiveAttempt == nil || active.ActiveAttempt.Ordinal != 2 ||
+		active.CumulativeAttempts != 1 || active.LifetimeAttempts != 2 {
+		t.Fatalf("first acceptance attempt after invalidated harness = %#v, want cumulative 1/1 and global ordinal/lifetime 2", active)
 	}
 }
 
